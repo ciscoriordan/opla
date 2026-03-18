@@ -191,6 +191,53 @@ opla/
     labels.py        # UPOS, morphological feature, and deprel label sets
 ```
 
+## Language coverage
+
+### Currently supported: Modern Greek
+
+Opla currently supports **Modern Greek (MG)**, including the Katharevousa
+register used in 19th-century literary translations. The underlying model was
+trained by AUEB-NLP on contemporary MG corpora, but handles Katharevousa well
+since the BERT backbone shares vocabulary and script with learned/archaic MG
+forms.
+
+Tested on Iakovos Polylas's 1892 Iliad translation (Katharevousa-influenced
+verse), which includes archaic verb forms, accusative -ν endings, polytonic
+remnants, and poetic elisions not found in standard MG.
+
+### Planned: Ancient Greek
+
+Ancient Greek support will use the same BERT backbone fine-tuned with AG task
+heads trained on:
+
+- **Perseus AGDT** (Ancient Greek Dependency Treebank) - 112K hand-annotated
+  tokens covering the full Iliad, with POS, morphology, and dependency parsing
+- **PROIEL Treebank** - ~200K tokens of prose (New Testament, Herodotus)
+- **Gorman Treebanks** - additional AG prose and drama
+
+AG requires an expanded label set (dual number, optative/subjunctive moods,
+middle voice, dative case is productive rather than vestigial). The POS and DP
+heads will be trained separately from the MG heads.
+
+### Planned: Medieval/Byzantine Greek
+
+Medieval Greek sits between AG and MG. Training data is limited, but the
+[DiGreC treebank](https://cid.ulster.ac.uk/) (56K tokens spanning Homer to
+early modern Greek) provides annotated Medieval/Byzantine material. A model
+trained on both AG and MG endpoints should handle the transitional period
+reasonably, with DiGreC for fine-tuning.
+
+### Multi-period API (future)
+
+```python
+model = Opla(lang="mg", device="cuda")    # Modern Greek (current)
+model = Opla(lang="ag", device="cuda")    # Ancient Greek
+model = Opla(lang="all", device="cuda")   # auto-detect or shared heads
+```
+
+This mirrors [Dilemma](https://github.com/ciscoriordan/dilemma)'s
+`lang="all"` / `"el"` / `"grc"` interface.
+
 ## Credits
 
 Opla uses pre-trained model weights from
