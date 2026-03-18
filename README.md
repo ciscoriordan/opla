@@ -283,11 +283,17 @@ If you use Opla, please also cite gr-nlp-toolkit:
 Toumazatos et al., "gr-nlp-toolkit: An open-source NLP toolkit for Modern Greek" (2024).
 ```
 
+## How to Cite
+
+```
+Francisco Riordan, "Opla: GPU-Optimized Greek POS Tagger and Dependency Parser" (2026).
+https://github.com/ciscoriordan/opla
+```
+
 ## Related projects
 
 - [Dilemma](https://github.com/ciscoriordan/dilemma) - Greek lemmatizer (MG + AG + Medieval)
 - [Dragoman](https://huggingface.co/ciscoriordan/dragoman) - Greek word alignment model
-- [iliad-align](https://github.com/ciscoriordan/iliad-align) - Iliad parallel reader alignment pipeline
 
 ## License
 
