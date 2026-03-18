@@ -230,8 +230,8 @@ reasonably, with DiGreC for fine-tuning.
 ### Multi-period API (future)
 
 ```python
-model = Opla(lang="mg", device="cuda")    # Modern Greek (current)
-model = Opla(lang="ag", device="cuda")    # Ancient Greek
+model = Opla(lang="el", device="cuda")     # Modern Greek (current)
+model = Opla(lang="grc", device="cuda")   # Ancient Greek
 model = Opla(lang="all", device="cuda")   # auto-detect or shared heads
 ```
 
