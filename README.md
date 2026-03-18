@@ -4,8 +4,8 @@ GPU-optimized Greek POS tagger and dependency parser. **117x faster** than
 [gr-nlp-toolkit](https://github.com/nlpaueb/gr-nlp-toolkit) on real-world
 Greek text, with identical POS output and near-identical dependency parsing.
 
-Opla (from Ancient Greek ὅπλα, "tools, equipment") is a drop-in replacement
-for gr-nlp-toolkit's POS and DP processors. It reuses gr-nlp-toolkit's
+Opla (from Ancient Greek `ὅπλα`, "tools, equipment") is a drop-in replacement
+for *gr-nlp-toolkit*'s POS and DP processors. It reuses *gr-nlp-toolkit*'s
 trained weights with no retraining required.
 
 ## Installation
@@ -14,8 +14,8 @@ trained weights with no retraining required.
 pip install -e .
 ```
 
-Requires PyTorch, Transformers, and huggingface-hub. Weights are downloaded
-automatically from HuggingFace on first use.
+Requires *PyTorch*, *Transformers*, and *huggingface-hub*. Weights are
+downloaded automatically from HuggingFace on first use.
 
 Optional: install [Dilemma](https://github.com/ciscoriordan/dilemma) for
 integrated lemmatization.
@@ -51,7 +51,7 @@ Opla(
 
 ## Why not gr-nlp-toolkit?
 
-Opla exists because gr-nlp-toolkit has critical performance bugs that make it
+Opla exists because *gr-nlp-toolkit* has critical performance bugs that make it
 orders of magnitude slower than it needs to be. The underlying BERT model and
 trained task heads are good - the inference code around them is not.
 
@@ -63,7 +63,7 @@ inefficiencies.
 
 ### Bug 1: 19 redundant BERT forward passes per sentence
 
-gr-nlp-toolkit's POS processor loops over 17 morphological features and runs
+*gr-nlp-toolkit*'s POS processor loops over 17 morphological features and runs
 a full BERT forward pass for each one, even though the model's own `forward()`
 method already returns all 17 features in a single pass. The processor calls
 BERT, extracts one feature, throws away the other 16, then calls BERT again
@@ -85,7 +85,7 @@ Total: **17 + 2 = 19 BERT forward passes per sentence.** Opla does it in 2
 
 ### Bug 2: No batching (hardcoded batch_size=1)
 
-gr-nlp-toolkit's `DatasetImpl.__len__` returns 1 unconditionally
+*gr-nlp-toolkit*'s `DatasetImpl.__len__` returns 1 unconditionally
 ([`domain/dataset.py` line 18](https://github.com/nlpaueb/gr-nlp-toolkit/blob/main/gr_nlp_toolkit/domain/dataset.py)),
 and the DataLoader is created with no batch size parameter
 ([`processors/tokenizer.py` line 150](https://github.com/nlpaueb/gr-nlp-toolkit/blob/main/gr_nlp_toolkit/processors/tokenizer.py)).
@@ -98,7 +98,7 @@ parallelism. On a GPU that can handle 64 sentences in parallel, this wastes
 The POS and DP processors each independently call
 `AutoModel.from_pretrained('nlpaueb/bert-base-greek-uncased-v1')`, loading two
 separate copies of the same 110M-parameter model into VRAM (~880 MB total).
-They never share weights or coordinate. In gr-nlp-toolkit's case this is pure
+They never share weights or coordinate. In *gr-nlp-toolkit*'s case this is pure
 waste since both are initialized from the same checkpoint. In Opla's case, the
 two instances are necessary because POS and DP were trained separately and
 their BERT weights have diverged, but at least they're loaded intentionally.
@@ -124,7 +124,7 @@ and raises immediately if anything is wrong.
 
 ### Benchmark: Iliad Book 1 (611 sentences, 5,772 tokens)
 
-| | gr-nlp-toolkit | Opla | Speedup |
+| | *gr-nlp-toolkit* | Opla | Speedup |
 |---|---|---|---|
 | Time | 169.4s | 1.4s | **117x** |
 | Throughput | 3.4 sent/s | 436 sent/s | |
@@ -132,7 +132,7 @@ and raises immediately if anything is wrong.
 | Batching | 1 sentence | ~64 sentences | 64x |
 | VRAM (BERT) | ~880 MB (wasted dup) | ~880 MB (needed) | |
 
-### Accuracy vs gr-nlp-toolkit
+### Accuracy vs *gr-nlp-toolkit*
 
 Tested on all 611 sentences of Iliad Book 1 (Polylas MG translation,
 5,772 tokens):
@@ -150,7 +150,7 @@ redistribution bonding) are 99.8% identical.
 
 ## Architecture
 
-Opla loads gr-nlp-toolkit's pre-trained weights from
+Opla loads *gr-nlp-toolkit*'s pre-trained weights from
 [AUEB-NLP/gr-nlp-toolkit](https://huggingface.co/AUEB-NLP/gr-nlp-toolkit)
 on HuggingFace and remaps them into a clean dual-backbone architecture:
 
@@ -172,7 +172,7 @@ Decode: argmax, pos_properties filter, subword-to-word mapping
 [{form, upos, lemma, feats, head, deprel}, ...]
 ```
 
-Two separate BERT instances are required because gr-nlp-toolkit trained POS
+Two separate BERT instances are required because *gr-nlp-toolkit* trained POS
 and DP with independent BERT backbones that diverged during training. Using
 the POS BERT for DP (or vice versa) degrades accuracy. This is still a 9.5x
 reduction in BERT forward passes (2 vs 19).
@@ -274,7 +274,7 @@ Opla uses pre-trained model weights from
 [NLP Group at Athens University of Economics and Business](http://nlp.cs.aueb.gr/)
 (AUEB-NLP). The BERT backbone is
 [nlpaueb/bert-base-greek-uncased-v1](https://huggingface.co/nlpaueb/bert-base-greek-uncased-v1).
-The POS and DP task head architectures are reproduced from gr-nlp-toolkit's
+The POS and DP task head architectures are reproduced from *gr-nlp-toolkit*'s
 source code to ensure weight compatibility.
 
 If you use Opla, please also cite gr-nlp-toolkit:
