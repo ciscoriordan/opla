@@ -1,4 +1,4 @@
-# Opla
+# Opla <img src="https://raw.githubusercontent.com/ciscoriordan/svg-flags/main/circle/languages/el.svg" width="28" alt="Greek"> <img src="https://raw.githubusercontent.com/ciscoriordan/svg-flags/main/circle/countries/cy.svg" width="28" alt="Cyprus"> <img src="https://raw.githubusercontent.com/ciscoriordan/svg-flags/main/circle/historical/byzantine.svg" width="28" alt="Byzantine"> <img src="https://raw.githubusercontent.com/ciscoriordan/svg-flags/main/circle/historical/ancient-greece.svg" width="28" alt="Ancient Greece">
 
 GPU-optimized Greek POS tagger and dependency parser. **117x faster** than
 [gr-nlp-toolkit](https://github.com/nlpaueb/gr-nlp-toolkit) on real-world
@@ -292,3 +292,5 @@ Toumazatos et al., "gr-nlp-toolkit: An open-source NLP toolkit for Modern Greek"
 ## License
 
 MIT
+
+Flag icons by [svg-flags](https://github.com/ciscoriordan/svg-flags).
