@@ -51,76 +51,17 @@ Opla(
 
 ## Why not gr-nlp-toolkit?
 
-Opla exists because *gr-nlp-toolkit* has critical performance bugs that make it
-orders of magnitude slower than it needs to be. The underlying BERT model and
-trained task heads are good - the inference code around them is not.
+The trained BERT weights are good. The inference code is not.
+We submitted [PR #29](https://github.com/nlpaueb/gr-nlp-toolkit/pull/29)
+upstream (not merged). Opla goes further.
 
-We submitted a fix for the most egregious bug as
-[PR #29](https://github.com/nlpaueb/gr-nlp-toolkit/pull/29) to the upstream
-repo. As of writing, it has not been merged. Opla goes further than that PR
-by adding true batching, fusing the model, and eliminating the remaining
-inefficiencies.
-
-### Bug 1: 19 redundant BERT forward passes per sentence
-
-*gr-nlp-toolkit*'s POS processor loops over 17 morphological features and runs
-a full BERT forward pass for each one, even though the model's own `forward()`
-method already returns all 17 features in a single pass. The processor calls
-BERT, extracts one feature, throws away the other 16, then calls BERT again
-for the next feature. This is in
-[`processors/pos.py` lines 71-76](https://github.com/nlpaueb/gr-nlp-toolkit/blob/main/gr_nlp_toolkit/processors/pos.py):
-
-```python
-for feat in self.feat_to_I2L.keys():       # 17 iterations
-    output = self._model(input_ids, ...)    # full BERT pass each time
-    predictions[feat] = argmax(output[feat])
-```
-
-The DP processor does the same thing, running BERT twice (once for heads, once
-for dependency relations), even though both are computed in a single forward
-pass.
-
-Total: **17 + 2 = 19 BERT forward passes per sentence.** Opla does it in 2
-(one per task, since POS and DP were trained with separate BERT backbones).
-
-### Bug 2: No batching (hardcoded batch_size=1)
-
-*gr-nlp-toolkit*'s `DatasetImpl.__len__` returns 1 unconditionally
-([`domain/dataset.py` line 18](https://github.com/nlpaueb/gr-nlp-toolkit/blob/main/gr_nlp_toolkit/domain/dataset.py)),
-and the DataLoader is created with no batch size parameter
-([`processors/tokenizer.py` line 150](https://github.com/nlpaueb/gr-nlp-toolkit/blob/main/gr_nlp_toolkit/processors/tokenizer.py)).
-Every sentence is processed in complete isolation, with no padding or
-parallelism. On a GPU that can handle 64 sentences in parallel, this wastes
-~98% of available compute.
-
-### Bug 3: Two duplicate BERT instances
-
-The POS and DP processors each independently call
-`AutoModel.from_pretrained('nlpaueb/bert-base-greek-uncased-v1')`, loading two
-separate copies of the same 110M-parameter model into VRAM (~880 MB total).
-They never share weights or coordinate. In *gr-nlp-toolkit*'s case this is pure
-waste since both are initialized from the same checkpoint. In Opla's case, the
-two instances are necessary because POS and DP were trained separately and
-their BERT weights have diverged, but at least they're loaded intentionally.
-
-### Bug 4: Underscore features emitted to output
-
-The POS processor emits morphological features with value `_` (meaning "not
-applicable") into the token's `feats` dict. For example, a VERB gets
-`{'Case': '_', 'Gender': '_', ...}`. These are noise - the `pos_properties`
-table already defines which features are valid per UPOS tag, but the
-processor only uses it to decide whether to *add* a feature, not to filter
-out `_` values. Downstream code has to check for and ignore these.
-Opla suppresses `_` values at decode time.
-
-### Bug 5: No `strict=True` on weight loading
-
-Both POS and DP processors load pre-trained weights with `strict=False`
-([`processors/pos.py` line 54](https://github.com/nlpaueb/gr-nlp-toolkit/blob/main/gr_nlp_toolkit/processors/pos.py),
-[`processors/dp.py` line 52](https://github.com/nlpaueb/gr-nlp-toolkit/blob/main/gr_nlp_toolkit/processors/dp.py)).
-This silently ignores missing or unexpected keys, meaning corrupted or
-mismatched checkpoints load without error. Opla validates all keys on load
-and raises immediately if anything is wrong.
+| Issue | *gr-nlp-toolkit* | Opla |
+|-------|-----------------|------|
+| BERT forward passes per sentence | **19** (POS loops over 17 features, calling BERT each time; DP calls BERT twice) | **2** (one per task) |
+| Batching | `batch_size=1` hardcoded | Dynamic batching (~64-150 sentences) |
+| BERT instances in VRAM | 2 identical copies (~880 MB wasted) | 2 distinct copies (needed - weights diverged during training) |
+| `_` features in output | Emitted (e.g. `Case: _` on verbs) | Suppressed |
+| Weight loading | `strict=False` (silent failures) | Validated on load |
 
 ### Benchmark: Iliad Book 1 (611 sentences, 5,772 tokens)
 
