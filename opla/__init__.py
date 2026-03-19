@@ -187,9 +187,14 @@ class Opla:
         )
 
         if self._lemmatize and self._lemmatizer is not None:
+            # Batch all forms across all sentences for one Dilemma call
+            all_forms = [t["form"] for sent in results for t in sent]
+            all_lemmas = self._lemmatizer.lemmatize_batch(all_forms)
+            idx = 0
             for sent_tokens in results:
                 for token in sent_tokens:
-                    token["lemma"] = self._lemmatizer.lemmatize(token["form"])
+                    token["lemma"] = all_lemmas[idx]
+                    idx += 1
         elif self._lemmatize:
             for sent_tokens in results:
                 for token in sent_tokens:
