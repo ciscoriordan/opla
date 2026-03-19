@@ -265,8 +265,8 @@ model = Opla(lang="med", device="cuda")   # Medieval/Byzantine Greek
 model = Opla(lang="all", device="cuda")   # auto-detect or shared heads
 ```
 
-Language codes: `el` (ISO 639-1), `grc` (ISO 639-2), `med` (short for
-Medieval Greek, Glottolog `medi1251`). These codes are shared with
+Language codes: `el` (ISO 639-1), `grc` (ISO 639-2), `med` (Medieval
+Greek). These codes are shared with
 [Dilemma](https://github.com/ciscoriordan/dilemma), but the two tools
 group `med` differently. Opla groups `med` with `grc` (shared BERT
 backbone and task heads) because Medieval *syntax* - polytonic script,
