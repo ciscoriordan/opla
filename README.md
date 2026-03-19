@@ -150,20 +150,21 @@ redistribution bonding) are 99.8% identical.
 
 ## Architecture
 
-Opla loads *gr-nlp-toolkit*'s pre-trained weights from
+For `lang="el"`, Opla loads *gr-nlp-toolkit*'s pre-trained weights from
 [AUEB-NLP/gr-nlp-toolkit](https://huggingface.co/AUEB-NLP/gr-nlp-toolkit)
-on HuggingFace and remaps them into a clean dual-backbone architecture:
+on HuggingFace and remaps them into a dual-backbone architecture on
+[GreekBERT](https://huggingface.co/nlpaueb/bert-base-greek-uncased-v1):
 
 ```
 Input sentences
     │
     ▼
-Batched tokenization (HuggingFace BERT tokenizer)
+Batched tokenization (GreekBERT tokenizer, uncased + deaccented)
     │  padding, attention masks, subword-to-word mapping
     │
-    ├──▶ POS BERT backbone ──▶ 17 Linear heads ──▶ UPOS + morphological features
+    ├──▶ POS GreekBERT ──▶ 17 Linear heads ──▶ UPOS + morphological features
     │
-    └──▶ DP BERT backbone ──▶ Biaffine attention ──▶ dependency heads + relations
+    └──▶ DP GreekBERT  ──▶ Biaffine attention ──▶ dependency heads + relations
     │
     ▼
 Decode: argmax, pos_properties filter, subword-to-word mapping
@@ -172,10 +173,15 @@ Decode: argmax, pos_properties filter, subword-to-word mapping
 [{form, upos, lemma, feats, head, deprel}, ...]
 ```
 
-Two separate BERT instances are required because *gr-nlp-toolkit* trained POS
-and DP with independent BERT backbones that diverged during training. Using
-the POS BERT for DP (or vice versa) degrades accuracy. This is still a 9.5x
-reduction in BERT forward passes (2 vs 19).
+Two separate GreekBERT instances are required because *gr-nlp-toolkit*
+trained POS and DP with independent backbones that diverged during training.
+Using the POS BERT for DP (or vice versa) degrades accuracy. This is still
+a 9.5x reduction in BERT forward passes (2 vs 19).
+
+For `lang="grc"` and `lang="med"`, Opla uses a single
+[Ancient-Greek-BERT](https://huggingface.co/pranaydeeps/Ancient-Greek-BERT)
+backbone with jointly trained POS+DP heads, requiring only one BERT forward
+pass per batch.
 
 ### Dynamic batching
 
@@ -224,11 +230,19 @@ opla/
 
 ### Currently supported: Modern Greek
 
-Opla currently supports **Modern Greek (MG)**, including the Katharevousa
-register used in 19th-century literary translations. The underlying model was
-trained by AUEB-NLP on contemporary MG corpora, but handles Katharevousa well
-since the BERT backbone shares vocabulary and script with learned/archaic MG
-forms.
+The `el` model uses
+[nlpaueb/bert-base-greek-uncased-v1](https://huggingface.co/nlpaueb/bert-base-greek-uncased-v1)
+(GreekBERT) as its backbone - a 12-layer, 768-dim BERT-base model
+pre-trained by AUEB-NLP on Greek Wikipedia, European Parliament proceedings,
+and the OSCAR Common Crawl corpus. The tokenizer lowercases and strips
+accents (NFD + remove combining marks), so all Greek text is normalized to
+unaccented lowercase before entering the model.
+
+POS and DP task heads come from *gr-nlp-toolkit*'s pre-trained weights,
+which were fine-tuned on top of GreekBERT. Opla handles Katharevousa well
+despite the MG training data because the BERT vocabulary covers the full
+Greek script and most Katharevousa forms share stems with their MG
+equivalents.
 
 Tested on Iakovos Polylas's 1892 Iliad translation (Katharevousa-influenced
 verse), which includes archaic verb forms, accusative -ν endings, polytonic
@@ -236,8 +250,16 @@ remnants, and poetic elisions not found in standard MG.
 
 ### Planned: Ancient Greek
 
-Ancient Greek support will use the same BERT backbone fine-tuned with AG task
-heads trained on:
+The `grc` model uses
+[pranaydeeps/Ancient-Greek-BERT](https://huggingface.co/pranaydeeps/Ancient-Greek-BERT)
+as its backbone - initialized from GreekBERT and further pre-trained for 80
+epochs on Ancient Greek corpora from the First1KGreek Project, Perseus
+Digital Library, PROIEL Treebank, and Gorman's Treebanks. It achieves >90%
+accuracy on AG POS tagging benchmarks. Same tokenizer and preprocessing as
+GreekBERT (uncased, deaccented), so the same `strip_accents_and_lowercase`
+pipeline works for both periods.
+
+POS and DP task heads will be trained on UD treebanks:
 
 - **Perseus AGDT** (Ancient Greek Dependency Treebank) - 112K hand-annotated
   tokens covering the full Iliad, with POS, morphology, and dependency parsing
@@ -277,18 +299,32 @@ Greek. Each tool groups `med` with whichever period best serves its task.
 
 ## Credits
 
-Opla uses pre-trained model weights from
-[gr-nlp-toolkit](https://github.com/nlpaueb/gr-nlp-toolkit) by the
+**Modern Greek backbone:**
+[GreekBERT](https://huggingface.co/nlpaueb/bert-base-greek-uncased-v1) by the
 [NLP Group at Athens University of Economics and Business](http://nlp.cs.aueb.gr/)
-(AUEB-NLP). The BERT backbone is
-[nlpaueb/bert-base-greek-uncased-v1](https://huggingface.co/nlpaueb/bert-base-greek-uncased-v1).
-The POS and DP task head architectures are reproduced from *gr-nlp-toolkit*'s
-source code to ensure weight compatibility.
+(AUEB-NLP). Pre-trained on Greek Wikipedia, European Parliament, and OSCAR.
 
-If you use Opla, please also cite gr-nlp-toolkit:
+**MG task heads:**
+[gr-nlp-toolkit](https://github.com/nlpaueb/gr-nlp-toolkit) by AUEB-NLP.
+POS and DP head architectures reproduced from *gr-nlp-toolkit*'s source code
+to ensure weight compatibility.
+
+**Ancient Greek backbone:**
+[Ancient-Greek-BERT](https://huggingface.co/pranaydeeps/Ancient-Greek-BERT)
+by Pranaydeep Singh (KU Leuven). Initialized from GreekBERT and further
+pre-trained on First1KGreek, Perseus, PROIEL, and Gorman treebanks.
+
+**AG training data:**
+[UD_Ancient_Greek-Perseus](https://universaldependencies.org/treebanks/grc_perseus/)
+and [UD_Ancient_Greek-PROIEL](https://universaldependencies.org/treebanks/grc_proiel/)
+from the [Universal Dependencies](https://universaldependencies.org/) project.
+
+If you use Opla, please also cite:
 
 ```
+Koutsikakis et al., "GREEK-BERT: The Greeks Visiting Sesame Street" (2020).
 Toumazatos et al., "gr-nlp-toolkit: An open-source NLP toolkit for Modern Greek" (2024).
+Singh et al., "A pilot study for BERT language modelling and morphological analysis for Ancient and Medieval Greek" (2021).
 ```
 
 ## How to Cite
