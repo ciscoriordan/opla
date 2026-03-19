@@ -357,6 +357,8 @@ def main():
                         help="Output directory for trained weights")
     parser.add_argument("--freeze-bert", action="store_true",
                         help="Freeze BERT weights, train only task heads")
+    parser.add_argument("--resume", default=None,
+                        help="Resume from checkpoint (.pt file)")
     args = parser.parse_args()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -449,6 +451,13 @@ def main():
     model = OplaModel(bert, feat_sizes=feat_sizes, num_deprels=len(dp_labels))
     model.to(device)
 
+    start_epoch = 0
+    if args.resume:
+        ckpt = torch.load(args.resume, map_location=device, weights_only=False)
+        model.load_state_dict(ckpt["model_state_dict"])
+        start_epoch = ckpt.get("epoch", 0)
+        print(f"Resumed from {args.resume} (epoch {start_epoch})")
+
     if args.freeze_bert:
         for param in model.pos_bert.parameters():
             param.requires_grad = False
@@ -461,13 +470,14 @@ def main():
     )
 
     # Train
-    print(f"\nTraining for {args.epochs} epochs...")
-    for epoch in range(1, args.epochs + 1):
+    total_epochs = start_epoch + args.epochs
+    print(f"\nTraining for {args.epochs} epochs (epoch {start_epoch + 1} to {total_epochs})...")
+    for epoch in range(start_epoch + 1, total_epochs + 1):
         t0 = time.perf_counter()
         train_loss = train_epoch(model, train_loader, optimizer, device, feat_to_l2i)
         elapsed = time.perf_counter() - t0
 
-        msg = f"Epoch {epoch}/{args.epochs}: loss={train_loss:.4f} ({elapsed:.0f}s)"
+        msg = f"Epoch {epoch}/{total_epochs}: loss={train_loss:.4f} ({elapsed:.0f}s)"
 
         if dev_loader:
             acc = evaluate(model, dev_loader, device, feat_to_l2i, deprel_l2i)

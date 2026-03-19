@@ -20,8 +20,10 @@ custom-trained heads on [Ancient-Greek-BERT](https://huggingface.co/pranaydeeps/
 pip install -e .
 ```
 
-Requires *PyTorch*, *Transformers*, and *huggingface-hub*. Weights are
-downloaded automatically from HuggingFace on first use.
+Requires *PyTorch*, *Transformers*, and *huggingface-hub*. MG weights are
+downloaded from [AUEB-NLP/gr-nlp-toolkit](https://huggingface.co/AUEB-NLP/gr-nlp-toolkit)
+on first use. AG and Medieval weights are downloaded from
+[ciscoriordan/opla](https://huggingface.co/ciscoriordan/opla).
 
 Optional: install [Dilemma](https://github.com/ciscoriordan/dilemma) for
 integrated lemmatization.
@@ -173,6 +175,8 @@ opla/
     decode.py        # Decode logits to structured token dicts
     labels.py        # UPOS, morphological feature, and deprel label sets
 train.py             # Train POS+DP heads on UD treebanks (grc, el, med)
+convert_digrec.py    # Convert DiGreC PROIEL XML to CoNLL-U for med training
+upload_weights.py    # Upload trained weights to HuggingFace
 ```
 
 ## Language coverage
@@ -215,34 +219,56 @@ treebanks:
 Because POS and DP are trained jointly from the start, the `grc` model uses
 a single BERT backbone (1 forward pass per batch, vs 2 for `el`).
 
-**Dev set accuracy (2,068 sentences):**
+**Dev set accuracy (2,068 sentences, 10 epochs):**
 
 | Metric | Accuracy |
 |--------|----------|
-| UPOS | **94.8%** |
-| Dependency heads | **82.7%** |
-| Dependency relations | **93.6%** |
+| UPOS | **95.7%** |
+| Dependency heads | **85.5%** |
+| Dependency relations | **94.2%** |
 | Morphological features | 96-100% per feature |
 
 AG uses an expanded label set: dual number, optative/subjunctive moods,
 middle voice, locative case, and more.
 
-To retrain: `python train.py --lang grc --epochs 3`
+To retrain: `python train.py --lang grc --epochs 10`
+To resume from checkpoint: `python train.py --resume weights/grc/opla_grc.pt --epochs 3 --lr 5e-6`
 
-### Planned: Medieval/Byzantine Greek
+### Medieval/Byzantine Greek
 
-Medieval Greek sits between AG and MG. Training data is limited, but the
-[DiGreC treebank](https://cid.ulster.ac.uk/) (56K tokens spanning Homer to
-early modern Greek) provides annotated Medieval/Byzantine material. A model
-trained on both AG and MG endpoints should handle the transitional period
-reasonably, with DiGreC for fine-tuning.
+The `med` model uses the same
+[Ancient-Greek-BERT](https://huggingface.co/pranaydeeps/Ancient-Greek-BERT)
+backbone as `grc`, with POS+DP heads trained on the
+[DiGreC treebank](https://proiel.github.io/digrec/) - 121K tokens of
+Medieval Greek prose spanning Homer to early modern Greek (Thucydides,
+Herodotus, Anna Komnene, Chronicle of Morea, and more).
+
+DiGreC uses the PROIEL annotation scheme. Opla's `convert_digrec.py` script
+converts it to UD-compatible CoNLL-U format with refined deprel mappings
+(PROIEL `aux` -> UD `det`/`discourse`/`cc`/`mark`/`advmod` by POS;
+`adv`+preposition -> `case`; `atr` -> `amod`/`nmod`/`det`/`nummod` by POS).
+
+**Dev set accuracy (586 sentences, 12 epochs):**
+
+| Metric | Accuracy |
+|--------|----------|
+| UPOS | **96.2%** |
+| Dependency heads | **74.5%** |
+| Dependency relations | **90.1%** |
+| Morphological features | 97-100% per feature |
+
+Head accuracy is lower than AG because the PROIEL->UD dependency conversion
+is lossy in some structural cases (PROIEL's flat tree structure vs UD's
+head-final conventions for PPs and relative clauses).
+
+To train: `python convert_digrec.py && python train.py --lang med --epochs 12`
 
 ### Multi-period API
 
 ```python
 model = Opla(lang="el", device="cuda")    # Modern Greek
 model = Opla(lang="grc", device="cuda")   # Ancient Greek
-model = Opla(lang="med", device="cuda")   # Medieval/Byzantine Greek (planned)
+model = Opla(lang="med", device="cuda")   # Medieval/Byzantine Greek
 ```
 
 Language codes: `el` (ISO 639-1), `grc` (ISO 639-2), `med` (Medieval
@@ -277,12 +303,18 @@ pre-trained on First1KGreek, Perseus, PROIEL, and Gorman treebanks.
 and [UD_Ancient_Greek-PROIEL](https://universaldependencies.org/treebanks/grc_proiel/)
 from the [Universal Dependencies](https://universaldependencies.org/) project.
 
+**Medieval Greek training data:**
+[DiGreC](https://proiel.github.io/digrec/) (Digitized Greek Corpus) by the
+PROIEL project. 121K tokens of Medieval Greek with morphological and syntactic
+annotation in the PROIEL scheme.
+
 If you use Opla, please also cite:
 
 ```
 Koutsikakis et al., "GREEK-BERT: The Greeks Visiting Sesame Street" (2020).
 Toumazatos et al., "gr-nlp-toolkit: An open-source NLP toolkit for Modern Greek" (2024).
 Singh et al., "A pilot study for BERT language modelling and morphological analysis for Ancient and Medieval Greek" (2021).
+Eckhoff et al., "The PROIEL treebank family: a standard for early attestations of Indo-European languages" (2018).
 ```
 
 ## How to Cite

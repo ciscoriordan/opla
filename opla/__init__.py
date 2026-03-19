@@ -97,15 +97,22 @@ class Opla:
     def _init_grc(self, checkpoint):
         """Initialize AG/Medieval model with single BERT (jointly trained)."""
         if checkpoint is None:
-            # Look for default weights
+            # Look for local weights first, then download from HuggingFace
             default = _WEIGHTS_DIR / self.lang / f"opla_{self.lang}.pt"
             if default.exists():
                 checkpoint = str(default)
             else:
-                raise FileNotFoundError(
-                    f"AG weights not found at {default}. "
-                    f"Train with: python train.py --lang grc"
-                )
+                try:
+                    from huggingface_hub import hf_hub_download
+                    checkpoint = hf_hub_download(
+                        repo_id="ciscoriordan/opla",
+                        filename=f"weights/{self.lang}/opla_{self.lang}.pt",
+                    )
+                except Exception:
+                    raise FileNotFoundError(
+                        f"Weights not found locally ({default}) or on HuggingFace. "
+                        f"Train with: python train.py --lang {self.lang}"
+                    )
 
         ckpt = torch.load(checkpoint, map_location="cpu", weights_only=True)
 
