@@ -252,9 +252,9 @@ converts it to UD-compatible CoNLL-U format with refined deprel mappings
 
 | Metric | Accuracy |
 |--------|----------|
-| UPOS | **96.2%** |
-| Dependency heads | **74.5%** |
-| Dependency relations | **90.1%** |
+| UPOS | **96.4%** |
+| Dependency heads | **75.4%** |
+| Dependency relations | **90.2%** |
 | Morphological features | 97-100% per feature |
 
 Head accuracy is lower than AG because the PROIEL->UD dependency conversion
