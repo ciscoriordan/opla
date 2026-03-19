@@ -1,5 +1,9 @@
 # Opla <img src="https://raw.githubusercontent.com/ciscoriordan/svg-flags/main/circle/languages/el.svg" width="28" alt="Greek"> <img src="https://raw.githubusercontent.com/ciscoriordan/svg-flags/main/circle/countries/cy.svg" width="28" alt="Cyprus"> <img src="https://raw.githubusercontent.com/ciscoriordan/svg-flags/main/circle/historical/byzantine.svg" width="28" alt="Byzantine"> <img src="https://raw.githubusercontent.com/ciscoriordan/svg-flags/main/circle/historical/ancient-greece.svg" width="28" alt="Ancient Greece">
 
+<p align="center">
+  <img src="opla.jpg" width="600" alt="Opla - tools spelled out in ancient metalworking tools">
+</p>
+
 GPU-optimized Greek POS tagger and dependency parser. **117x faster** than
 [gr-nlp-toolkit](https://github.com/nlpaueb/gr-nlp-toolkit) on real-world
 Greek text, with identical POS output and near-identical dependency parsing.
