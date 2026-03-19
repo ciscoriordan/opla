@@ -162,6 +162,7 @@ def convert_sentence(sent_elem):
         old_to_new[t.get("id")] = i
 
     lines = []
+    parsed = []
     for i, t in enumerate(tokens, 1):
         form = t.get("form", "_")
         lemma = t.get("lemma", "_")
@@ -315,9 +316,107 @@ def convert_sentence(sent_elem):
             deprel = "root"
 
         feat_str = feats_to_str(feats)
-        lines.append(f"{i}\t{form}\t{lemma}\t{upos}\t{proiel_pos}\t{feat_str}\t{head}\t{deprel}\t_\t_")
+        parsed.append({
+            "id": i, "form": form, "lemma": lemma, "upos": upos,
+            "xpos": proiel_pos, "feats": feat_str, "head": head,
+            "deprel": deprel,
+        })
+
+    # --- Tree restructuring: PP head inversion ---
+    # In PROIEL, prepositions head their NP: noun -> prep (obl/adv/atr)
+    # In UD, nouns head their PP: prep -> noun (case)
+    # Find prepositions that have noun/pronoun dependents and invert.
+    parsed = _restructure_pps(parsed)
+
+    lines = []
+    for p in parsed:
+        lines.append(
+            f"{p['id']}\t{p['form']}\t{p['lemma']}\t{p['upos']}\t"
+            f"{p['xpos']}\t{p['feats']}\t{p['head']}\t{p['deprel']}\t_\t_"
+        )
 
     return lines
+
+
+def _restructure_pps(tokens):
+    """Restructure prepositional phrases: make noun the head, prep the case dependent.
+
+    In PROIEL, PPs are headed by the preposition:
+        eaten(3) -> by(2, obl) -> dog(1, obl)  [dog depends on prep]
+
+    In UD, PPs are headed by the noun:
+        eaten(3) -> dog(1, obl) -> by(2, case)  [prep depends on noun]
+
+    For each preposition that is already labeled 'case' (from our deprel mapping),
+    it's already correct - skip it. For prepositions that HEAD nominal dependents
+    (the PROIEL pattern), we need to invert.
+    """
+    n = len(tokens)
+    if n == 0:
+        return tokens
+
+    # Build index: token id -> index
+    id_to_idx = {t["id"]: i for i, t in enumerate(tokens)}
+
+    # Find prepositions (ADP) that are NOT already case dependents
+    # and that have nominal children (NOUN, PROPN, PRON, DET, NUM, ADJ)
+    nominal_upos = {"NOUN", "PROPN", "PRON", "DET", "NUM", "ADJ"}
+
+    for prep_idx, prep in enumerate(tokens):
+        if prep["upos"] != "ADP":
+            continue
+        if prep["deprel"] == "case":
+            continue  # already correct
+
+        prep_id = prep["id"]
+
+        # Find nominal children of this preposition
+        nominal_children = []
+        other_children = []
+        for child_idx, child in enumerate(tokens):
+            if child["head"] == prep_id:
+                if child["upos"] in nominal_upos:
+                    nominal_children.append(child_idx)
+                else:
+                    other_children.append(child_idx)
+
+        if not nominal_children:
+            continue
+
+        # Pick the "main" nominal child (rightmost noun, or first if ambiguous)
+        # In Greek, the main noun in a PP is typically the last nominal
+        main_child_idx = nominal_children[-1]
+        main_child = tokens[main_child_idx]
+        main_child_id = main_child["id"]
+
+        # Invert: main child takes prep's position in the tree
+        # 1. Main child gets prep's head and deprel
+        main_child["head"] = prep["head"]
+        main_child["deprel"] = prep["deprel"]
+
+        # 2. Prep becomes case dependent of main child
+        prep["head"] = main_child_id
+        prep["deprel"] = "case"
+
+        # 3. Other children of prep -> reparent to main child
+        for ci in other_children:
+            tokens[ci]["head"] = main_child_id
+
+        # 4. Other nominal children of prep -> reparent to main child (nmod)
+        for ci in nominal_children:
+            if ci != main_child_idx:
+                tokens[ci]["head"] = main_child_id
+                if tokens[ci]["deprel"] not in ("nmod", "appos", "conj"):
+                    tokens[ci]["deprel"] = "nmod"
+
+        # 5. Anything else in the sentence that pointed to the prep
+        #    should now point to the main child instead
+        for t in tokens:
+            if t["head"] == prep_id and t["id"] != main_child_id and t["id"] != prep_id:
+                if t is not prep:  # don't re-point the prep itself
+                    t["head"] = main_child_id
+
+    return tokens
 
 
 def main():
