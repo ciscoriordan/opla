@@ -4,13 +4,15 @@
   <img src="opla.jpg" width="600" alt="Opla - tools spelled out in ancient metalworking tools">
 </p>
 
-GPU-optimized Greek POS tagger and dependency parser. **117x faster** than
+GPU-optimized Greek POS tagger and dependency parser. **215x faster** than
 [gr-nlp-toolkit](https://github.com/nlpaueb/gr-nlp-toolkit) on real-world
 Greek text, with identical POS output and near-identical dependency parsing.
+Supports Modern Greek, Ancient Greek, and Medieval Greek.
 
 Opla (from Ancient Greek `ὅπλα`, "tools, equipment") is a drop-in replacement
 for *gr-nlp-toolkit*'s POS and DP processors. It reuses *gr-nlp-toolkit*'s
-trained weights with no retraining required.
+trained weights for Modern Greek and adds Ancient Greek support via
+custom-trained heads on [Ancient-Greek-BERT](https://huggingface.co/pranaydeeps/Ancient-Greek-BERT).
 
 ## Installation
 
@@ -29,7 +31,9 @@ integrated lemmatization.
 ```python
 from opla import Opla
 
-model = Opla(device="cuda")
+model = Opla(lang="el", device="cuda")    # Modern Greek
+model = Opla(lang="grc", device="cuda")   # Ancient Greek
+
 results = model.tag(["Ο Αχιλλέας πολεμά", "Η Ελένη φεύγει"])
 
 for token in results[0]:
@@ -67,15 +71,15 @@ upstream (not merged). Opla goes further.
 | `_` features in output | Emitted (e.g. `Case: _` on verbs) | Suppressed |
 | Weight loading | `strict=False` (silent failures) | Validated on load |
 
-### Benchmark: Iliad Book 1 (611 sentences, 5,772 tokens)
+### Benchmark
 
 | | *gr-nlp-toolkit* | Opla | Speedup |
 |---|---|---|---|
-| Time | 169.4s | 1.4s | **117x** |
-| Throughput | 3.4 sent/s | 436 sent/s | |
-| BERT passes | 19/sentence | 2/sentence | 9.5x |
-| Batching | 1 sentence | ~64 sentences | 64x |
-| VRAM (BERT) | ~880 MB (wasted dup) | ~880 MB (needed) | |
+| **Full Iliad (24 books, 146K tokens)** | 4,193s (70 min) | **19.5s** | **215x** |
+| Book 1 (611 sentences, 5,772 tokens) | 169.4s | 1.0s | 170x |
+| BERT passes per sentence | 19 | 2 (el) / 1 (grc) | 9.5-19x |
+| Batching | 1 sentence | ~64-150 sentences | 64x |
+| Lemmatization | N/A | Batched via [Dilemma](https://github.com/ciscoriordan/dilemma) | |
 
 ### Accuracy vs *gr-nlp-toolkit*
 
@@ -138,10 +142,9 @@ text (~13 subwords per sentence), this means ~150 sentences per batch.
 ### Integrated lemmatization
 
 When [Dilemma](https://github.com/ciscoriordan/dilemma) is installed, Opla
-calls it on each token after POS decoding, returning lemmas alongside POS and
-DP output. This matches the output format expected by downstream tools like
-`tag_polylas.py` in the
-[iliad-align](https://github.com/ciscoriordan/iliad-align) pipeline.
+batches all token forms across all sentences in a single `lemmatize_batch()`
+call. Lookup table hits resolve instantly; only unknown forms go through
+Dilemma's character-level transformer, and those are batched too.
 
 ## Output format
 
@@ -169,6 +172,7 @@ opla/
     tokenize.py      # Batched tokenization with subword-to-word mapping
     decode.py        # Decode logits to structured token dicts
     labels.py        # UPOS, morphological feature, and deprel label sets
+train.py             # Train POS+DP heads on UD treebanks (grc, el, med)
 ```
 
 ## Language coverage
@@ -193,27 +197,37 @@ Tested on Iakovos Polylas's 1892 Iliad translation (Katharevousa-influenced
 verse), which includes archaic verb forms, accusative -ν endings, polytonic
 remnants, and poetic elisions not found in standard MG.
 
-### Planned: Ancient Greek
+### Ancient Greek
 
 The `grc` model uses
 [pranaydeeps/Ancient-Greek-BERT](https://huggingface.co/pranaydeeps/Ancient-Greek-BERT)
 as its backbone - initialized from GreekBERT and further pre-trained for 80
 epochs on Ancient Greek corpora from the First1KGreek Project, Perseus
-Digital Library, PROIEL Treebank, and Gorman's Treebanks. It achieves >90%
-accuracy on AG POS tagging benchmarks. Same tokenizer and preprocessing as
-GreekBERT (uncased, deaccented), so the same `strip_accents_and_lowercase`
-pipeline works for both periods.
+Digital Library, PROIEL Treebank, and Gorman's Treebanks. Same tokenizer
+and preprocessing as GreekBERT (uncased, deaccented).
 
-POS and DP task heads will be trained on UD treebanks:
+POS and DP task heads are jointly trained on 416K tokens from two UD
+treebanks:
 
-- **Perseus AGDT** (Ancient Greek Dependency Treebank) - 112K hand-annotated
-  tokens covering the full Iliad, with POS, morphology, and dependency parsing
-- **PROIEL Treebank** - ~200K tokens of prose (New Testament, Herodotus)
-- **Gorman Treebanks** - additional AG prose and drama
+- [**UD_Ancient_Greek-Perseus**](https://universaldependencies.org/treebanks/grc_perseus/) - 203K tokens (Homer, Sophocles, Plato, Herodotus, Hesiod)
+- [**UD_Ancient_Greek-PROIEL**](https://universaldependencies.org/treebanks/grc_proiel/) - 214K tokens (New Testament, Herodotus)
 
-AG requires an expanded label set (dual number, optative/subjunctive moods,
-middle voice, dative case is productive rather than vestigial). The POS and DP
-heads will be trained separately from the MG heads.
+Because POS and DP are trained jointly from the start, the `grc` model uses
+a single BERT backbone (1 forward pass per batch, vs 2 for `el`).
+
+**Dev set accuracy (2,068 sentences):**
+
+| Metric | Accuracy |
+|--------|----------|
+| UPOS | **94.8%** |
+| Dependency heads | **82.7%** |
+| Dependency relations | **93.6%** |
+| Morphological features | 96-100% per feature |
+
+AG uses an expanded label set: dual number, optative/subjunctive moods,
+middle voice, locative case, and more.
+
+To retrain: `python train.py --lang grc --epochs 3`
 
 ### Planned: Medieval/Byzantine Greek
 
@@ -223,13 +237,12 @@ early modern Greek) provides annotated Medieval/Byzantine material. A model
 trained on both AG and MG endpoints should handle the transitional period
 reasonably, with DiGreC for fine-tuning.
 
-### Multi-period API (future)
+### Multi-period API
 
 ```python
-model = Opla(lang="el", device="cuda")    # Modern Greek (current)
+model = Opla(lang="el", device="cuda")    # Modern Greek
 model = Opla(lang="grc", device="cuda")   # Ancient Greek
-model = Opla(lang="med", device="cuda")   # Medieval/Byzantine Greek
-model = Opla(lang="all", device="cuda")   # auto-detect or shared heads
+model = Opla(lang="med", device="cuda")   # Medieval/Byzantine Greek (planned)
 ```
 
 Language codes: `el` (ISO 639-1), `grc` (ISO 639-2), `med` (Medieval
