@@ -259,13 +259,21 @@ reasonably, with DiGreC for fine-tuning.
 ### Multi-period API (future)
 
 ```python
-model = Opla(lang="el", device="cuda")     # Modern Greek (current)
+model = Opla(lang="el", device="cuda")    # Modern Greek (current)
 model = Opla(lang="grc", device="cuda")   # Ancient Greek
+model = Opla(lang="med", device="cuda")   # Medieval/Byzantine Greek
 model = Opla(lang="all", device="cuda")   # auto-detect or shared heads
 ```
 
-This mirrors [Dilemma](https://github.com/ciscoriordan/dilemma)'s
-`lang="all"` / `"el"` / `"grc"` interface.
+Language codes: `el` (ISO 639-1), `grc` (ISO 639-2), `med` (short for
+Medieval Greek, Glottolog `medi1251`). These codes are shared with
+[Dilemma](https://github.com/ciscoriordan/dilemma), but the two tools
+group `med` differently. Opla groups `med` with `grc` (shared BERT
+backbone and task heads) because Medieval *syntax* - polytonic script,
+full case system, optative mood - is closer to Ancient Greek.
+Dilemma groups `med` with `el` for lemma lookup because Medieval
+*morphology* (inflection patterns) is the direct ancestor of Modern
+Greek. Each tool groups `med` with whichever period best serves its task.
 
 ## Credits
 

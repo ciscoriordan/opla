@@ -2,44 +2,61 @@
 
 Usage:
     from opla import Opla
-    model = Opla(device="cuda")
-    results = model.tag(["Ο Αχιλλέας πολεμά", "Η Ελένη φεύγει"])
+
+    model = Opla(device="cuda")                    # MG (default)
+    model = Opla(lang="grc", device="cuda")        # Ancient Greek
+    results = model.tag(["Ο Αχιλλέας πολεμά"])
 """
+
+from pathlib import Path
 
 import torch
 from transformers import AutoModel
 
 from .model import OplaModel
+from .labels import EL_POS_LABEL_COUNTS, EL_DP_LABEL_COUNT
 from .weights import load_weights
 from .tokenize import batch_tokenize
 from .decode import decode_batch
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # Maximum subwords per dynamic batch before flushing to GPU
 _DEFAULT_MAX_SUBWORDS = 2048
+
+# BERT models per language
+_BERT_MODELS = {
+    "el": "nlpaueb/bert-base-greek-uncased-v1",
+    "grc": "pranaydeeps/Ancient-Greek-BERT",
+    "med": "pranaydeeps/Ancient-Greek-BERT",  # Medieval/Byzantine Greek
+}
+
+_WEIGHTS_DIR = Path(__file__).parent.parent / "weights"
 
 
 class Opla:
     """Greek POS tagger and dependency parser with integrated lemmatization.
 
-    Fused BERT model with shared backbone - single forward pass for POS
-    (17 feature heads) + dependency parsing (biaffine attention). Includes
-    Dilemma lemmatizer for MG/AG lemmatization.
+    Supports Modern Greek (el) via gr-nlp-toolkit weights and Ancient Greek
+    (grc) via custom-trained heads on UD Perseus + PROIEL treebanks.
 
     Args:
+        lang: "el" (Modern Greek, default) or "grc" (Ancient Greek).
         device: "cuda", "cpu", or None (auto-detect).
-        pos_path: Path to POS weights. None = auto-download from HuggingFace.
-        dp_path: Path to DP weights. None = auto-download from HuggingFace.
+        pos_path: Path to POS weights. None = auto-detect.
+        dp_path: Path to DP weights. None = auto-detect (MG only).
+        checkpoint: Path to a joint checkpoint (AG). Overrides pos/dp_path.
         max_subwords: Maximum subwords per batch before flushing.
         lemmatize: Whether to include lemmas in output (requires Dilemma).
     """
 
     def __init__(
         self,
+        lang: str = "el",
         device: str | None = None,
         pos_path: str | None = None,
         dp_path: str | None = None,
+        checkpoint: str | None = None,
         max_subwords: int = _DEFAULT_MAX_SUBWORDS,
         lemmatize: bool = True,
     ):
@@ -47,26 +64,69 @@ class Opla:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = torch.device(device)
         self.max_subwords = max_subwords
+        self.lang = lang
         self._lemmatize = lemmatize
         self._lemmatizer = None
 
-        # Load dual BERT backbones + task heads
-        pos_bert = AutoModel.from_pretrained("nlpaueb/bert-base-greek-uncased-v1")
-        dp_bert = AutoModel.from_pretrained("nlpaueb/bert-base-greek-uncased-v1")
-        self.model = OplaModel(pos_bert, dp_bert)
-        load_weights(self.model, pos_path=pos_path, dp_path=dp_path, device="cpu")
+        if lang == "el":
+            self._init_el(pos_path, dp_path)
+        elif lang in ("grc", "med"):
+            self._init_grc(checkpoint)
+        else:
+            raise ValueError(f"Unsupported language: {lang}. Use 'el', 'grc', or 'med'.")
+
         self.model.to(self.device)
         self.model.eval()
 
-        # Lazy-load Dilemma
         if self._lemmatize:
             self._init_lemmatizer()
+
+    def _init_el(self, pos_path, dp_path):
+        """Initialize MG model with separate POS/DP BERTs (gr-nlp-toolkit weights)."""
+        bert_name = _BERT_MODELS["el"]
+        pos_bert = AutoModel.from_pretrained(bert_name)
+        dp_bert = AutoModel.from_pretrained(bert_name)
+        # Use MG-sized label counts for gr-nlp-toolkit weight compatibility
+        self.model = OplaModel(
+            pos_bert, dp_bert,
+            feat_sizes=EL_POS_LABEL_COUNTS,
+            num_deprels=EL_DP_LABEL_COUNT,
+        )
+        load_weights(self.model, pos_path=pos_path, dp_path=dp_path, device="cpu")
+
+    def _init_grc(self, checkpoint):
+        """Initialize AG/Medieval model with single BERT (jointly trained)."""
+        if checkpoint is None:
+            # Look for default weights
+            default = _WEIGHTS_DIR / self.lang / f"opla_{self.lang}.pt"
+            if default.exists():
+                checkpoint = str(default)
+            else:
+                raise FileNotFoundError(
+                    f"AG weights not found at {default}. "
+                    f"Train with: python train.py --lang grc"
+                )
+
+        ckpt = torch.load(checkpoint, map_location="cpu", weights_only=True)
+
+        bert_name = ckpt.get("bert_model", _BERT_MODELS["grc"])
+        feat_sizes = ckpt.get("feat_sizes")
+        num_deprels = ckpt.get("num_deprels")
+
+        bert = AutoModel.from_pretrained(bert_name)
+        self.model = OplaModel(
+            bert,
+            feat_sizes=feat_sizes,
+            num_deprels=num_deprels,
+        )
+        self.model.load_state_dict(ckpt["model_state_dict"], strict=False)
 
     def _init_lemmatizer(self):
         """Initialize Dilemma lemmatizer."""
         try:
             from dilemma import Dilemma
-            self._lemmatizer = Dilemma(lang="all", device="cpu")
+            dilemma_lang = "all"
+            self._lemmatizer = Dilemma(lang=dilemma_lang, device="cpu")
         except ImportError:
             self._lemmatize = False
 
@@ -85,17 +145,14 @@ class Opla:
         if not sentences:
             return []
 
-        # Dynamic batching: accumulate sentences until subword limit
         all_results = [None] * len(sentences)
         batch_indices = []
         batch_sentences = []
         est_subwords = 0
 
         for i, sent in enumerate(sentences):
-            # Rough estimate: 1.3 subwords per whitespace word
-            est = int(len(sent.split()) * 1.3) + 2  # +2 for [CLS]/[SEP]
+            est = int(len(sent.split()) * 1.3) + 2
             if batch_sentences and est_subwords + est > self.max_subwords:
-                # Flush current batch
                 results = self._tag_batch(batch_sentences)
                 for idx, res in zip(batch_indices, results):
                     all_results[idx] = res
@@ -107,7 +164,6 @@ class Opla:
             batch_sentences.append(sent)
             est_subwords += est
 
-        # Flush remaining
         if batch_sentences:
             results = self._tag_batch(batch_sentences)
             for idx, res in zip(batch_indices, results):
@@ -130,13 +186,11 @@ class Opla:
             enc.word_masks, enc.subword2word, enc.word_forms,
         )
 
-        # Add lemmas via Dilemma
         if self._lemmatize and self._lemmatizer is not None:
             for sent_tokens in results:
                 for token in sent_tokens:
                     token["lemma"] = self._lemmatizer.lemmatize(token["form"])
         elif self._lemmatize:
-            # Dilemma not available, use form as fallback
             for sent_tokens in results:
                 for token in sent_tokens:
                     token["lemma"] = token["form"]

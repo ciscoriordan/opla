@@ -13,23 +13,39 @@ class OplaModel(nn.Module):
     Uses separate BERT instances for POS and DP (matching gr-nlp-toolkit's
     trained weights which diverged during separate training). Two forward
     passes total, down from gr-nlp-toolkit's 19.
+
+    For AG models trained jointly, pos_bert and dp_bert can be the same
+    instance (single BERT, single forward pass).
     """
 
-    def __init__(self, pos_bert, dp_bert):
+    def __init__(self, pos_bert, dp_bert=None, feat_sizes=None, num_deprels=None):
+        """
+        Args:
+            pos_bert: BERT model for POS features.
+            dp_bert: BERT model for DP. If None, shares pos_bert.
+            feat_sizes: Dict mapping feature name -> num labels. If None,
+                uses full unified label set from labels.py.
+            num_deprels: Number of dependency relation labels. If None,
+                uses full unified set from labels.py.
+        """
         super().__init__()
         self.pos_bert = pos_bert
-        self.dp_bert = dp_bert
+        self.dp_bert = dp_bert if dp_bert is not None else pos_bert
+        self.shared_bert = dp_bert is None
         self.dropout = nn.Dropout(0.0)
 
-        # POS heads: one Linear(768, n_labels) per feature
-        feat_to_size = {k: len(v) for k, v in pos_labels.items()}
+        # POS heads
+        if feat_sizes is None:
+            feat_sizes = {k: len(v) for k, v in pos_labels.items()}
         self.pos_heads = nn.ModuleDict({
             feat: nn.Linear(768, size)
-            for feat, size in feat_to_size.items()
+            for feat, size in feat_sizes.items()
         })
 
-        # DP heads: biaffine attention (exact architecture from DPModel)
-        self.numrels = len(dp_labels)
+        # DP heads: biaffine attention
+        if num_deprels is None:
+            num_deprels = len(dp_labels)
+        self.numrels = num_deprels
 
         self.arc_head = nn.Linear(768, 768)
         self.arc_dep = nn.Linear(768, 768)
@@ -47,7 +63,10 @@ class OplaModel(nn.Module):
         self.relu = LeakyReLU(1)
 
     def forward(self, input_ids, attention_mask):
-        """Two BERT forward passes: one for POS, one for DP.
+        """Forward pass producing POS logits and DP scores.
+
+        If pos_bert and dp_bert are the same instance, only one BERT
+        forward pass is needed.
 
         Args:
             input_ids: (batch, seq_len) token IDs
@@ -58,7 +77,7 @@ class OplaModel(nn.Module):
             arc_scores: (batch, seq_len, seq_len) head scores
             rel_scores: (batch, seq_len, seq_len, numrels) relation scores
         """
-        # POS: one BERT pass for all 17 features
+        # POS: one BERT pass for all features
         pos_out = self.dropout(
             self.pos_bert(input_ids, attention_mask=attention_mask)[0]
         )
@@ -66,10 +85,13 @@ class OplaModel(nn.Module):
             feat: head(pos_out) for feat, head in self.pos_heads.items()
         }
 
-        # DP: one BERT pass for arc + relation scoring
-        dp_out = self.dropout(
-            self.dp_bert(input_ids, attention_mask=attention_mask)[0]
-        )
+        # DP: reuse pos_out if shared, otherwise separate pass
+        if self.shared_bert:
+            dp_out = pos_out
+        else:
+            dp_out = self.dropout(
+                self.dp_bert(input_ids, attention_mask=attention_mask)[0]
+            )
         bs, mseq = dp_out.shape[:2]
 
         arc_h = self.relu(self.arc_head(dp_out))
