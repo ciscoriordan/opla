@@ -377,11 +377,15 @@ def main():
     if args.data is None:
         if args.lang == "grc":
             args.data = sorted(data_dir.glob("UD_Ancient_Greek-*/*-train.conllu"))
+        elif args.lang == "med":
+            args.data = sorted(data_dir.glob("DiGreC/*-train.conllu"))
         else:
             args.data = sorted(data_dir.glob("UD_Greek-*/*-train.conllu"))
     if args.dev is None:
         if args.lang == "grc":
             args.dev = sorted(data_dir.glob("UD_Ancient_Greek-*/*-dev.conllu"))
+        elif args.lang == "med":
+            args.dev = sorted(data_dir.glob("DiGreC/*-dev.conllu"))
         else:
             args.dev = sorted(data_dir.glob("UD_Greek-*/*-dev.conllu"))
 

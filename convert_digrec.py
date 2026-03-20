@@ -311,6 +311,18 @@ def convert_sentence(sent_elem):
             else:
                 deprel = "xcomp"
 
+        # PROIEL "part" - partitive: nmod when head is nominal, obl when head is verbal
+        if relation == "part":
+            if head_id and head_id in old_to_new:
+                head_idx = old_to_new[head_id] - 1  # 0-indexed into tokens list
+                if head_idx < len(tokens):
+                    head_proiel_pos = tokens[head_idx].get("part-of-speech", "")
+                    head_upos = POS_MAP.get(head_proiel_pos, "X")
+                    if head_upos in ("NOUN", "PROPN", "PRON", "NUM", "ADJ", "DET"):
+                        deprel = "nmod"
+                    else:
+                        deprel = "obl"
+
         # Root handling
         if head == 0:
             deprel = "root"
@@ -383,9 +395,20 @@ def _restructure_pps(tokens):
         if not nominal_children:
             continue
 
-        # Pick the "main" nominal child (rightmost noun, or first if ambiguous)
-        # In Greek, the main noun in a PP is typically the last nominal
-        main_child_idx = nominal_children[-1]
+        # Check for coordination among children: if a CC (coordinating conj)
+        # is among other_children, this is a coordinated PP. In UD, the first
+        # conjunct should be the head.
+        has_coord = any(
+            tokens[ci]["upos"] == "CCONJ" or tokens[ci]["deprel"] == "cc"
+            for ci in other_children
+        )
+
+        if has_coord:
+            # For coordinated PPs, pick the FIRST (leftmost) nominal as head
+            main_child_idx = nominal_children[0]
+        else:
+            # For simple PPs, pick the rightmost nominal (typical Greek order)
+            main_child_idx = nominal_children[-1]
         main_child = tokens[main_child_idx]
         main_child_id = main_child["id"]
 
@@ -402,11 +425,14 @@ def _restructure_pps(tokens):
         for ci in other_children:
             tokens[ci]["head"] = main_child_id
 
-        # 4. Other nominal children of prep -> reparent to main child (nmod)
+        # 4. Other nominal children of prep -> reparent to main child
         for ci in nominal_children:
             if ci != main_child_idx:
                 tokens[ci]["head"] = main_child_id
-                if tokens[ci]["deprel"] not in ("nmod", "appos", "conj"):
+                if has_coord:
+                    # Coordinated PP: other nominals are conjuncts
+                    tokens[ci]["deprel"] = "conj"
+                elif tokens[ci]["deprel"] not in ("nmod", "appos", "conj"):
                     tokens[ci]["deprel"] = "nmod"
 
         # 5. Anything else in the sentence that pointed to the prep

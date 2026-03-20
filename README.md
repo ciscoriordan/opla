@@ -211,28 +211,27 @@ Digital Library, PROIEL Treebank, and Gorman's Treebanks. Same tokenizer
 and preprocessing as GreekBERT (uncased, deaccented).
 
 POS and DP task heads are jointly trained on 416K tokens from two UD
-treebanks:
+treebanks, then fine-tuned with DiGreC data mixed in:
 
 - [**UD_Ancient_Greek-Perseus**](https://universaldependencies.org/treebanks/grc_perseus/) - 203K tokens (Homer, Sophocles, Plato, Herodotus, Hesiod)
 - [**UD_Ancient_Greek-PROIEL**](https://universaldependencies.org/treebanks/grc_proiel/) - 214K tokens (New Testament, Herodotus)
+- [**DiGreC**](https://proiel.github.io/digrec/) - 103K tokens (mixed fine-tuning, 3 epochs at lr=1e-5)
 
 Because POS and DP are trained jointly from the start, the `grc` model uses
 a single BERT backbone (1 forward pass per batch, vs 2 for `el`).
 
-**Dev set accuracy (2,068 sentences, 10 epochs):**
+**Test set accuracy:**
 
-| Metric | Accuracy |
-|--------|----------|
-| UPOS | **95.7%** |
-| Dependency heads | **85.5%** |
-| Dependency relations | **94.2%** |
-| Morphological features | 96-100% per feature |
+| Test set | UPOS | DEPREL |
+|----------|------|--------|
+| UD AG-Perseus | **94.2%** | **90.0%** |
+| DiGreC | **94.4%** | **81.7%** |
 
 AG uses an expanded label set: dual number, optative/subjunctive moods,
 middle voice, locative case, and more.
 
-To retrain: `python train.py --lang grc --epochs 10`
-To resume from checkpoint: `python train.py --resume weights/grc/opla_grc.pt --epochs 3 --lr 5e-6`
+To retrain from scratch: `python train.py --lang grc --epochs 10`
+To fine-tune with DiGreC: `python train.py --resume weights/grc/opla_grc.pt --data data/UD_Ancient_Greek-Perseus/grc_perseus-ud-train.conllu data/UD_Ancient_Greek-PROIEL/grc_proiel-ud-train.conllu data/DiGreC/digrec-train.conllu --dev data/DiGreC/digrec-dev.conllu --epochs 3 --lr 1e-5`
 
 ### Medieval/Byzantine Greek
 
@@ -246,7 +245,9 @@ Herodotus, Anna Komnene, Chronicle of Morea, and more).
 DiGreC uses the PROIEL annotation scheme. Opla's `convert_digrec.py` script
 converts it to UD-compatible CoNLL-U format with refined deprel mappings
 (PROIEL `aux` -> UD `det`/`discourse`/`cc`/`mark`/`advmod` by POS;
-`adv`+preposition -> `case`; `atr` -> `amod`/`nmod`/`det`/`nummod` by POS).
+`adv`+preposition -> `case`; `atr` -> `amod`/`nmod`/`det`/`nummod` by POS;
+`part` -> `nmod`/`obl` by head POS). PP restructuring handles coordination
+(first conjunct as head) and reparents dependents correctly.
 
 **Dev set accuracy (586 sentences, 12 epochs):**
 
@@ -257,9 +258,9 @@ converts it to UD-compatible CoNLL-U format with refined deprel mappings
 | Dependency relations | **90.2%** |
 | Morphological features | 97-100% per feature |
 
-Head accuracy is lower than AG because the PROIEL->UD dependency conversion
-is lossy in some structural cases (PROIEL's flat tree structure vs UD's
-head-final conventions for PPs and relative clauses).
+Head accuracy is lower than AG because Medieval text has more complex
+syntactic structures and the PROIEL->UD conversion requires tree
+restructuring (PP head inversion, coordination handling).
 
 To train: `python convert_digrec.py && python train.py --lang med --epochs 12`
 
