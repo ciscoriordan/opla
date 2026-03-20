@@ -196,7 +196,12 @@ class Opla:
         if self._lemmatize and self._lemmatizer is not None:
             # Batch all forms across all sentences for one Dilemma call
             all_forms = [t["form"] for sent in results for t in sent]
-            all_lemmas = self._lemmatizer.lemmatize_batch(all_forms)
+            # Use POS-aware lemmatization if available
+            if hasattr(self._lemmatizer, "lemmatize_batch_pos"):
+                all_upos = [t["upos"] for sent in results for t in sent]
+                all_lemmas = self._lemmatizer.lemmatize_batch_pos(all_forms, all_upos)
+            else:
+                all_lemmas = self._lemmatizer.lemmatize_batch(all_forms)
             idx = 0
             for sent_tokens in results:
                 for token in sent_tokens:
