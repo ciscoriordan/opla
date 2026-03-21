@@ -1,3 +1,4 @@
 weights/grc/*.pt filter=lfs diff=lfs merge=lfs -text
 data/**/*.conllu filter=lfs diff=lfs merge=lfs -text
+weights/el/*.pt filter=lfs diff=lfs merge=lfs -text
 *.conllu !text !filter !merge !diff
