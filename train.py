@@ -215,7 +215,8 @@ def collate_fn(batch):
 
 # --- Training ---
 
-def train_epoch(model, dataloader, optimizer, device, feat_to_l2i):
+def train_epoch(model, dataloader, optimizer, device, feat_to_l2i,
+                scheduler=None, max_grad_norm=1.0):
     """Train one epoch. Returns average loss."""
     model.train()
     total_loss = 0
@@ -280,7 +281,10 @@ def train_epoch(model, dataloader, optimizer, device, feat_to_l2i):
         loss = loss / bs
         optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
         optimizer.step()
+        if scheduler is not None:
+            scheduler.step()
 
         total_loss += loss.item()
         n_batches += 1
@@ -467,18 +471,27 @@ def main():
             param.requires_grad = False
         print("BERT weights frozen - training task heads only")
 
-    # Optimizer
+    # Optimizer + scheduler
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, model.parameters()),
         lr=args.lr,
     )
+    num_training_steps = len(train_loader) * args.epochs
+    num_warmup_steps = min(500, num_training_steps // 10)
+    from transformers import get_linear_schedule_with_warmup
+    scheduler = get_linear_schedule_with_warmup(
+        optimizer, num_warmup_steps=num_warmup_steps,
+        num_training_steps=num_training_steps,
+    )
+    print(f"LR schedule: {num_warmup_steps} warmup, {num_training_steps} total steps")
 
     # Train
     total_epochs = start_epoch + args.epochs
     print(f"\nTraining for {args.epochs} epochs (epoch {start_epoch + 1} to {total_epochs})...")
     for epoch in range(start_epoch + 1, total_epochs + 1):
         t0 = time.perf_counter()
-        train_loss = train_epoch(model, train_loader, optimizer, device, feat_to_l2i)
+        train_loss = train_epoch(model, train_loader, optimizer, device, feat_to_l2i,
+                                 scheduler=scheduler)
         elapsed = time.perf_counter() - t0
 
         msg = f"Epoch {epoch}/{total_epochs}: loss={train_loss:.4f} ({elapsed:.0f}s)"
