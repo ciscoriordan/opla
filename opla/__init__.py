@@ -82,7 +82,19 @@ class Opla:
             self._init_lemmatizer()
 
     def _init_el(self, pos_path, dp_path):
-        """Initialize MG model with separate POS/DP BERTs (gr-nlp-toolkit weights)."""
+        """Initialize MG model.
+
+        Checks for a fine-tuned single-backbone checkpoint first (from
+        train.py --lang el). Falls back to gr-nlp-toolkit dual-backbone
+        weights if no checkpoint exists.
+        """
+        # Prefer fine-tuned single-backbone checkpoint
+        finetuned = _WEIGHTS_DIR / "el" / "opla_el.pt"
+        if finetuned.exists():
+            self._init_grc_from_file(str(finetuned), fallback_bert="el")
+            return
+
+        # Fall back to gr-nlp-toolkit dual-backbone weights
         bert_name = _BERT_MODELS["el"]
         pos_bert = AutoModel.from_pretrained(bert_name)
         dp_bert = AutoModel.from_pretrained(bert_name)
@@ -93,6 +105,22 @@ class Opla:
             num_deprels=EL_DP_LABEL_COUNT,
         )
         load_weights(self.model, pos_path=pos_path, dp_path=dp_path, device="cpu")
+
+    def _init_grc_from_file(self, checkpoint: str, fallback_bert: str = "grc"):
+        """Load a single-backbone checkpoint (shared by grc, med, and fine-tuned el)."""
+        ckpt = torch.load(checkpoint, map_location="cpu", weights_only=True)
+
+        bert_name = ckpt.get("bert_model", _BERT_MODELS[fallback_bert])
+        feat_sizes = ckpt.get("feat_sizes")
+        num_deprels = ckpt.get("num_deprels")
+
+        bert = AutoModel.from_pretrained(bert_name)
+        self.model = OplaModel(
+            bert,
+            feat_sizes=feat_sizes,
+            num_deprels=num_deprels,
+        )
+        self.model.load_state_dict(ckpt["model_state_dict"], strict=False)
 
     def _init_grc(self, checkpoint):
         """Initialize AG/Medieval model with single BERT (jointly trained)."""
@@ -114,19 +142,7 @@ class Opla:
                         f"Train with: python train.py --lang {self.lang}"
                     )
 
-        ckpt = torch.load(checkpoint, map_location="cpu", weights_only=True)
-
-        bert_name = ckpt.get("bert_model", _BERT_MODELS["grc"])
-        feat_sizes = ckpt.get("feat_sizes")
-        num_deprels = ckpt.get("num_deprels")
-
-        bert = AutoModel.from_pretrained(bert_name)
-        self.model = OplaModel(
-            bert,
-            feat_sizes=feat_sizes,
-            num_deprels=num_deprels,
-        )
-        self.model.load_state_dict(ckpt["model_state_dict"], strict=False)
+        self._init_grc_from_file(checkpoint)
 
     def _init_lemmatizer(self):
         """Initialize Dilemma lemmatizer."""

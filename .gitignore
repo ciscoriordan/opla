@@ -5,4 +5,3 @@ build/
 *.pyc
 .env
 weights/
-data/
