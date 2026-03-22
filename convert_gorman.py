@@ -32,7 +32,7 @@ POS_MAP = {
     "d": "ADV",
     "l": "DET",      # article
     "p": "PRON",
-    "c": "CCONJ",    # conjunction (refined below)
+    "c": "CCONJ",    # conjunction (refined to SCONJ by relation)
     "r": "ADP",      # preposition
     "i": "INTJ",
     "m": "NUM",
@@ -40,6 +40,20 @@ POS_MAP = {
     "u": "PUNCT",
     "x": "X",
 }
+
+# Subordinating conjunction lemmas (AGDT pos=c but UD SCONJ)
+_SCONJ_LEMMAS = {
+    "ὅτι", "ὡς", "ἵνα", "ὅπως", "εἰ", "ἐάν", "ἤν", "ἐπεί",
+    "ἐπειδή", "ἐπειδάν", "ὅτε", "ὁπότε", "πρίν", "ἕως", "μέχρι",
+    "ὥστε", "ὅτε", "ὁπόταν",
+}
+
+# εἰμί lemma forms -> AUX when used as copula
+_AUX_LEMMAS = {"εἰμί", "εἰμι"}
+
+# Elision marks to normalize
+_KORONIS = "\u1FBD"  # ᾽ GREEK KORONIS
+_APOSTROPHE = "'"
 
 # AGDT relation -> UD deprel
 REL_MAP = {
@@ -215,11 +229,28 @@ def convert_file(xml_path: Path) -> list[list[dict]]:
             if not form:
                 continue
 
+            # Normalize elision marks: ᾽ (koronis) -> ' (apostrophe)
+            # Then strip trailing apostrophe from form (BERT splits it
+            # as a separate token, so keeping it causes misalignment)
+            form = form.replace(_KORONIS, _APOSTROPHE)
+            lemma = lemma.replace(_KORONIS, _APOSTROPHE)
+            form = form.rstrip(_APOSTROPHE + "''")
+
             # Clean lemma
             if lemma.startswith("punc"):
                 lemma = form
 
             upos, feats = parse_postag(postag)
+
+            # Refine CCONJ -> SCONJ for subordinating conjunctions
+            if upos == "CCONJ" and (relation == "AuxC"
+                                     or lemma in _SCONJ_LEMMAS):
+                upos = "SCONJ"
+
+            # Refine VERB -> AUX for εἰμί as copula
+            if upos == "VERB" and lemma in _AUX_LEMMAS:
+                if relation in ("AuxV", "PRED") or "cop" in relation.lower():
+                    upos = "AUX"
 
             # Convert relation
             deprel = convert_relation(relation, upos)
