@@ -229,12 +229,20 @@ def convert_file(xml_path: Path) -> list[list[dict]]:
             if not form:
                 continue
 
-            # Normalize elision marks: ᾽ (koronis) -> ' (apostrophe)
-            # Then strip trailing apostrophe from form (BERT splits it
-            # as a separate token, so keeping it causes misalignment)
-            form = form.replace(_KORONIS, _APOSTROPHE)
+            # Normalize elision marks and strip trailing apostrophes.
+            # BERT splits apostrophes as separate tokens, causing
+            # misalignment. Strip all variants: ᾽ ' ' ʼ
+            _ELISION_CHARS = "\u1FBD\u0027\u2019\u02BC"
+            form = form.rstrip(_ELISION_CHARS)
             lemma = lemma.replace(_KORONIS, _APOSTROPHE)
-            form = form.rstrip(_APOSTROPHE + "''")
+
+            # Skip lacuna markers like [0] - BERT splits brackets
+            if form.startswith("[") and form.endswith("]"):
+                continue
+
+            # Skip hyphen-prefix fragments like -δ, -θ
+            if form.startswith("-") and len(form) <= 3:
+                continue
 
             # Clean lemma
             if lemma.startswith("punc"):
