@@ -382,14 +382,19 @@ def main():
     data_dir = Path(__file__).parent / "data"
     if args.data is None:
         if args.lang == "grc":
-            args.data = sorted(data_dir.glob("UD_Ancient_Greek-*/*-train.conllu"))
+            args.data = sorted(
+                data_dir.glob("UD_Ancient_Greek-*/*-train.conllu"))
+            # Also include Gorman trees if available
+            args.data += sorted(data_dir.glob("Gorman/*-train.conllu"))
         elif args.lang == "med":
             args.data = sorted(data_dir.glob("DiGreC/*-train.conllu"))
         else:
             args.data = sorted(data_dir.glob("UD_Greek-*/*-train.conllu"))
     if args.dev is None:
         if args.lang == "grc":
-            args.dev = sorted(data_dir.glob("UD_Ancient_Greek-*/*-dev.conllu"))
+            args.dev = sorted(
+                data_dir.glob("UD_Ancient_Greek-*/*-dev.conllu"))
+            args.dev += sorted(data_dir.glob("Gorman/*-dev.conllu"))
         elif args.lang == "med":
             args.dev = sorted(data_dir.glob("DiGreC/*-dev.conllu"))
         else:
