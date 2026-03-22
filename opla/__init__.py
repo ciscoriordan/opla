@@ -124,9 +124,25 @@ class Opla:
         self.model.load_state_dict(ckpt["model_state_dict"], strict=False)
 
     def _init_grc(self, checkpoint):
-        """Initialize AG/Medieval model with single BERT (jointly trained)."""
+        """Initialize AG/Medieval model with single BERT (jointly trained).
+
+        Prefers ONNX weights if available (no PyTorch/transformers needed
+        for inference). Falls back to PyTorch checkpoint.
+        """
+        # Try ONNX first (lightweight inference, no transformers needed)
+        onnx_dir = _WEIGHTS_DIR / self.lang / "onnx"
+        if (onnx_dir / "opla_joint.onnx").exists():
+            try:
+                from .onnx_model import OplaONNX
+                self.model = OplaONNX(onnx_dir)
+                self._using_onnx = True
+                return
+            except ImportError:
+                pass  # onnxruntime not installed, fall back to PyTorch
+
+        self._using_onnx = False
+
         if checkpoint is None:
-            # Look for local weights first, then download from HuggingFace
             default = _WEIGHTS_DIR / self.lang / f"opla_{self.lang}.pt"
             if default.exists():
                 checkpoint = str(default)
@@ -223,15 +239,20 @@ class Opla:
 
         return all_results
 
-    @torch.inference_mode()
     def _tag_batch(self, sentences: list[str]) -> list[list[dict]]:
         """Process a single batch through the model."""
         enc = batch_tokenize(sentences)
 
-        input_ids = enc.input_ids.to(self.device)
-        attention_mask = enc.attention_mask.to(self.device)
-
-        pos_logits, arc_scores, rel_scores = self.model(input_ids, attention_mask)
+        if getattr(self, "_using_onnx", False):
+            # ONNX: pass numpy arrays, get back torch tensors
+            pos_logits, arc_scores, rel_scores = self.model(
+                enc.input_ids, enc.attention_mask)
+        else:
+            with torch.inference_mode():
+                input_ids = enc.input_ids.to(self.device)
+                attention_mask = enc.attention_mask.to(self.device)
+                pos_logits, arc_scores, rel_scores = self.model(
+                    input_ids, attention_mask)
 
         results = decode_batch(
             pos_logits, arc_scores, rel_scores,
