@@ -18,6 +18,7 @@ from .labels import EL_POS_LABEL_COUNTS, EL_DP_LABEL_COUNT
 from .weights import load_weights
 from .tokenize import batch_tokenize
 from .decode import decode_batch
+from .segment import segment
 
 __version__ = "0.2.0"
 
@@ -153,18 +154,34 @@ class Opla:
         except ImportError:
             self._lemmatize = False
 
-    def tag(self, sentences: list[str]) -> list[list[dict]]:
+    def tag(
+        self,
+        sentences: list[str] | str,
+        segment_text: bool = False,
+    ) -> list[list[dict]]:
         """Tag a list of sentences, returning per-sentence token dicts.
 
         Handles dynamic batching internally - pass any number of sentences.
 
         Args:
-            sentences: List of raw text strings (one sentence each).
+            sentences: List of raw text strings (one sentence each), or a
+                single string. When a single string is passed with
+                segment_text=True, it is automatically split into sentences
+                using Greek punctuation rules.
+            segment_text: If True and input is a single string, auto-segment
+                it into sentences before tagging. Has no effect when input
+                is already a list.
 
         Returns:
             List of sentence results. Each sentence is a list of token dicts:
             {"form", "upos", "lemma", "feats", "head", "deprel"}
         """
+        if isinstance(sentences, str):
+            if segment_text:
+                sentences = segment(sentences)
+            else:
+                sentences = [sentences]
+
         if not sentences:
             return []
 
