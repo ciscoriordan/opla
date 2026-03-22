@@ -149,10 +149,22 @@ class Opla:
         """Initialize Dilemma lemmatizer."""
         try:
             from dilemma import Dilemma
-            dilemma_lang = "all"
-            self._lemmatizer = Dilemma(lang=dilemma_lang, device="cpu")
         except ImportError:
-            self._lemmatize = False
+            # Try sibling directory (development layout)
+            import sys
+            dilemma_path = Path(__file__).parent.parent.parent / "dilemma"
+            if dilemma_path.exists():
+                sys.path.insert(0, str(dilemma_path))
+                try:
+                    from dilemma import Dilemma
+                except ImportError:
+                    self._lemmatize = False
+                    return
+            else:
+                self._lemmatize = False
+                return
+        dilemma_lang = "all"
+        self._lemmatizer = Dilemma(lang=dilemma_lang, device="cpu")
 
     def tag(
         self,
