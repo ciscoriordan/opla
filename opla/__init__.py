@@ -129,9 +129,9 @@ class Opla:
         Prefers ONNX weights if available (no PyTorch/transformers needed
         for inference). Falls back to PyTorch checkpoint.
         """
-        # Try ONNX first (lightweight inference, no transformers needed)
+        # Try ONNX if explicitly requested via checkpoint="onnx"
         onnx_dir = _WEIGHTS_DIR / self.lang / "onnx"
-        if (onnx_dir / "opla_joint.onnx").exists():
+        if checkpoint == "onnx" and (onnx_dir / "opla_joint.onnx").exists():
             try:
                 from .onnx_model import OplaONNX
                 self.model = OplaONNX(onnx_dir)

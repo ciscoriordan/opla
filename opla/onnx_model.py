@@ -37,9 +37,12 @@ class OplaONNX:
     def __call__(self, input_ids, attention_mask):
         """Run inference, returning outputs matching OplaModel.forward().
 
+        Processes each sentence individually to avoid ONNX dynamic shape
+        issues with BERT's internal buffers, then stacks results.
+
         Args:
-            input_ids: numpy array (batch, seq_len) or torch.Tensor
-            attention_mask: numpy array (batch, seq_len) or torch.Tensor
+            input_ids: torch.Tensor (batch, seq_len)
+            attention_mask: torch.Tensor (batch, seq_len)
 
         Returns:
             pos_logits: dict {feat_name: torch.Tensor (batch, seq, n_labels)}
@@ -48,36 +51,57 @@ class OplaONNX:
         """
         import torch
 
-        # Convert to numpy if needed
         if hasattr(input_ids, "numpy"):
             input_ids_np = input_ids.cpu().numpy()
             attention_mask_np = attention_mask.cpu().numpy()
         else:
-            input_ids_np = input_ids
-            attention_mask_np = attention_mask
+            input_ids_np = np.asarray(input_ids)
+            attention_mask_np = np.asarray(attention_mask)
 
-        outputs = self.session.run(
-            None,
-            {
-                "input_ids": input_ids_np.astype(np.int64),
-                "attention_mask": attention_mask_np.astype(np.int64),
-            },
-        )
+        batch_size = input_ids_np.shape[0]
 
-        # Map outputs back to the expected format
+        # Run each sentence separately to avoid dynamic shape issues
+        all_outputs = []
+        for i in range(batch_size):
+            ids_i = input_ids_np[i:i+1].astype(np.int64)
+            mask_i = attention_mask_np[i:i+1].astype(np.int64)
+            out = self.session.run(
+                None,
+                {"input_ids": ids_i, "attention_mask": mask_i},
+            )
+            all_outputs.append(out)
+
+        # Stack results across batch
         pos_logits = {}
-        arc_scores = None
-        rel_scores = None
+        arc_scores_list = []
+        rel_scores_list = []
 
-        for name, arr in zip(self._output_names, outputs):
-            tensor = torch.from_numpy(arr)
+        for name_idx, name in enumerate(self._output_names):
             if name.startswith("pos_"):
-                feat = name[4:]  # strip "pos_" prefix
-                pos_logits[feat] = tensor
+                feat = name[4:]
+                stacked = np.concatenate(
+                    [out[name_idx] for out in all_outputs], axis=0)
+                pos_logits[feat] = torch.from_numpy(stacked)
             elif name == "arc_scores":
-                arc_scores = tensor
+                arc_scores_list = [out[name_idx] for out in all_outputs]
             elif name == "rel_scores":
-                rel_scores = tensor
+                rel_scores_list = [out[name_idx] for out in all_outputs]
+
+        # Pad arc/rel scores to same seq_len before stacking
+        max_seq = max(a.shape[1] for a in arc_scores_list)
+        padded_arc = []
+        padded_rel = []
+        for arc, rel in zip(arc_scores_list, rel_scores_list):
+            seq = arc.shape[1]
+            if seq < max_seq:
+                pad_width = max_seq - seq
+                arc = np.pad(arc, ((0,0),(0,pad_width),(0,pad_width)))
+                rel = np.pad(rel, ((0,0),(0,pad_width),(0,pad_width),(0,0)))
+            padded_arc.append(arc)
+            padded_rel.append(rel)
+
+        arc_scores = torch.from_numpy(np.concatenate(padded_arc, axis=0))
+        rel_scores = torch.from_numpy(np.concatenate(padded_rel, axis=0))
 
         return pos_logits, arc_scores, rel_scores
 

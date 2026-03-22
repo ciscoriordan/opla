@@ -198,11 +198,6 @@ def export(lang: str, weights_path: Path, output_dir: Path):
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    dynamic_axes = {
-        "input_ids": {0: "batch", 1: "seq_len"},
-        "attention_mask": {0: "batch", 1: "seq_len"},
-    }
-
     if shared:
         # Single ONNX model for AG/med
         wrapper = JointWrapper(model)
@@ -210,6 +205,20 @@ def export(lang: str, weights_path: Path, output_dir: Path):
         feat_names = sorted(model.pos_heads.keys())
 
         out_names = [f"pos_{f}" for f in feat_names] + ["arc_scores", "rel_scores"]
+
+        # All inputs and outputs need dynamic batch + seq_len axes
+        dynamic_axes = {
+            "input_ids": {0: "batch", 1: "seq_len"},
+            "attention_mask": {0: "batch", 1: "seq_len"},
+        }
+        for name in out_names:
+            if name.startswith("pos_"):
+                dynamic_axes[name] = {0: "batch", 1: "seq_len"}
+            elif name == "arc_scores":
+                dynamic_axes[name] = {0: "batch", 1: "seq_len", 2: "seq_len"}
+            elif name == "rel_scores":
+                dynamic_axes[name] = {0: "batch", 1: "seq_len", 2: "seq_len"}
+
         out_path = output_dir / "opla_joint.onnx"
 
         print(f"Exporting joint model to {out_path}...")
@@ -219,7 +228,7 @@ def export(lang: str, weights_path: Path, output_dir: Path):
             input_names=["input_ids", "attention_mask"],
             output_names=out_names,
             dynamic_axes=dynamic_axes,
-            opset_version=14,
+            opset_version=17,
             do_constant_folding=True,
         )
         print(f"  {out_path}: {out_path.stat().st_size / 1e6:.1f} MB")
