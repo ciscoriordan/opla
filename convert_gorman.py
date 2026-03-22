@@ -244,6 +244,16 @@ def convert_file(xml_path: Path) -> list[list[dict]]:
             if form.startswith("-") and len(form) <= 3:
                 continue
 
+            # Join crasis fragments: τ- before a vowel word = crasis
+            # Gorman splits τἆλλα as τ- + ἆλλα. Strip the trailing
+            # hyphen so it becomes a standalone τ (BERT handles this).
+            if form.endswith("-") and len(form) <= 3:
+                form = form.rstrip("-")
+
+            # Normalize ellipsis: ... -> single .
+            if form == "..." or form == "…":
+                form = "."
+
             # Clean lemma
             if lemma.startswith("punc"):
                 lemma = form
