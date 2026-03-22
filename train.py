@@ -58,8 +58,8 @@ def parse_conllu(path):
             form = parts[1]
             upos = parts[3]
             raw_feats = parts[5]
-            head = int(parts[6])
-            deprel = parts[7]
+            head = int(parts[6]) if parts[6] and parts[6] != "_" else 0
+            deprel = parts[7] if parts[7] and parts[7] != "_" else "dep"
 
             feats = {}
             if raw_feats != "_":

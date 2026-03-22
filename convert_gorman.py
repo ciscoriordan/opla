@@ -208,9 +208,9 @@ def convert_file(xml_path: Path) -> list[list[dict]]:
             form = w.get("form", "")
             lemma = w.get("lemma", "")
             postag = w.get("postag", "")
-            head = w.get("head", "0")
-            relation = w.get("relation", "dep")
-            tok_id = w.get("id", "0")
+            head = w.get("head", "") or "0"
+            relation = w.get("relation", "") or "dep"
+            tok_id = w.get("id", "") or "0"
 
             if not form:
                 continue
