@@ -49,6 +49,26 @@ for token in results[0]:
 
 Pass any number of sentences. Opla handles batching internally.
 
+### Automatic sentence segmentation
+
+Pass unsegmented Greek text with `segment_text=True` to auto-split on
+sentence-ending punctuation (`.` `;` `·` `!`), with abbreviation
+awareness for both Modern and Ancient Greek:
+
+```python
+text = "Τι κάνεις; Καλά. Ο Αχιλλέας πολεμά!"
+results = model.tag(text, segment_text=True)
+# Returns 3 sentence results
+```
+
+The segmenter can also be used standalone:
+
+```python
+from opla.segment import segment
+sentences = segment("π.χ. αυτό είναι μία πρόταση. Αυτή είναι άλλη.")
+# ['π.χ. αυτό είναι μία πρόταση.', 'Αυτή είναι άλλη.']
+```
+
 ### Options
 
 ```python
@@ -56,6 +76,7 @@ Opla(
     device="cuda",       # "cuda", "cpu", or None (auto-detect)
     lemmatize=True,      # include Dilemma lemmas in output
     max_subwords=2048,   # subword budget per batch (tune for VRAM)
+    checkpoint="onnx",   # use ONNX weights if available (AG/med only)
 )
 ```
 
@@ -148,6 +169,30 @@ batches all token forms across all sentences in a single `lemmatize_batch()`
 call. Lookup table hits resolve instantly; only unknown forms go through
 Dilemma's character-level transformer, and those are batched too.
 
+### ONNX inference
+
+The model can be exported to ONNX via `export_onnx.py` for CPU-only
+deployment with `onnxruntime` instead of PyTorch. For AG/med models
+(single shared BERT), this produces a single combined file; for MG
+(dual BERT), it produces separate POS and DP files.
+
+```bash
+# Export AG model to ONNX (~535 MB)
+python export_onnx.py --lang grc --weights weights/grc/opla_grc.pt
+
+# Output goes to weights/grc/onnx/opla_joint.onnx by default
+```
+
+To load the ONNX model at inference time, pass `checkpoint="onnx"`:
+
+```python
+model = Opla(lang="grc", checkpoint="onnx")
+```
+
+This requires `onnxruntime` (`pip install onnxruntime`). If ONNX weights
+are not found or `onnxruntime` is not installed, Opla falls back to the
+standard PyTorch checkpoint.
+
 ## Output format
 
 Each token is a dict with these fields:
@@ -174,8 +219,12 @@ opla/
     tokenize.py      # Batched tokenization with subword-to-word mapping
     decode.py        # Decode logits to structured token dicts
     labels.py        # UPOS, morphological feature, and deprel label sets
+    segment.py       # Greek sentence segmentation with abbreviation handling
+    onnx_model.py    # ONNX runtime inference wrapper
 train.py             # Train POS+DP heads on UD treebanks (grc, el, med)
 convert_digrec.py    # Convert DiGreC PROIEL XML to CoNLL-U for med training
+convert_gorman.py    # Convert Gorman AGDT XML to CoNLL-U for grc training
+export_onnx.py       # Export model to ONNX format for CPU deployment
 upload_weights.py    # Upload trained weights to HuggingFace
 ```
 
@@ -210,22 +259,23 @@ epochs on Ancient Greek corpora from the First1KGreek Project, Perseus
 Digital Library, PROIEL Treebank, and Gorman's Treebanks. Same tokenizer
 and preprocessing as GreekBERT (uncased, deaccented).
 
-POS and DP task heads are jointly trained on 416K tokens from two UD
-treebanks, then fine-tuned with DiGreC data mixed in:
+POS and DP task heads are jointly trained on 1.1M tokens from three
+treebank sources, then fine-tuned with DiGreC data mixed in:
 
 - [**UD_Ancient_Greek-Perseus**](https://universaldependencies.org/treebanks/grc_perseus/) - 203K tokens (Homer, Sophocles, Plato, Herodotus, Hesiod)
 - [**UD_Ancient_Greek-PROIEL**](https://universaldependencies.org/treebanks/grc_proiel/) - 214K tokens (New Testament, Herodotus)
+- [**Gorman's Greek Dependency Trees**](https://github.com/vgorman1/Greek-Dependency-Trees) - 692K tokens converted from AGDT XML to CoNLL-U via `convert_gorman.py`, with SCONJ/AUX mapping, elision handling, and 0.1% mismatch rate
 - [**DiGreC**](https://proiel.github.io/digrec/) - 103K tokens (mixed fine-tuning, 3 epochs at lr=1e-5)
 
 Because POS and DP are trained jointly from the start, the `grc` model uses
 a single BERT backbone (1 forward pass per batch, vs 2 for `el`).
 
-**Test set accuracy:**
+**Dev set accuracy (combined Perseus + PROIEL + Gorman):**
 
-| Test set | UPOS | DEPREL |
-|----------|------|--------|
-| UD AG-Perseus | **94.2%** | **90.0%** |
-| DiGreC | **94.4%** | **81.7%** |
+| Metric | Accuracy |
+|--------|----------|
+| UPOS | **96.8%** |
+| DEPREL | **91.8%** |
 
 AG uses an expanded label set: dual number, optative/subjunctive moods,
 middle voice, locative case, and more.
@@ -303,6 +353,8 @@ pre-trained on First1KGreek, Perseus, PROIEL, and Gorman treebanks.
 [UD_Ancient_Greek-Perseus](https://universaldependencies.org/treebanks/grc_perseus/)
 and [UD_Ancient_Greek-PROIEL](https://universaldependencies.org/treebanks/grc_proiel/)
 from the [Universal Dependencies](https://universaldependencies.org/) project.
+[Greek Dependency Trees](https://github.com/vgorman1/Greek-Dependency-Trees)
+by Vanessa Gorman (University of Nebraska-Lincoln).
 
 **Medieval Greek training data:**
 [DiGreC](https://proiel.github.io/digrec/) (Digitized Greek Corpus) by the
@@ -316,6 +368,7 @@ Koutsikakis et al., "GREEK-BERT: The Greeks Visiting Sesame Street" (2020).
 Toumazatos et al., "gr-nlp-toolkit: An open-source NLP toolkit for Modern Greek" (2024).
 Singh et al., "A pilot study for BERT language modelling and morphological analysis for Ancient and Medieval Greek" (2021).
 Eckhoff et al., "The PROIEL treebank family: a standard for early attestations of Indo-European languages" (2018).
+Gorman, "Dependency Trees for Ancient Greek Prose" (2020).
 ```
 
 ## How to Cite
