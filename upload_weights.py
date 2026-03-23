@@ -17,12 +17,13 @@ WEIGHTS_DIR = Path(__file__).parent / "weights"
 
 
 def upload_lang(api, lang):
-    """Upload weights for a single language."""
+    """Upload weights for a single language (PyTorch + ONNX if available)."""
     weight_file = WEIGHTS_DIR / lang / f"opla_{lang}.pt"
     if not weight_file.exists():
         print(f"  Skipping {lang}: {weight_file} not found")
         return False
 
+    # Upload PyTorch weights
     remote_path = f"weights/{lang}/opla_{lang}.pt"
     print(f"  Uploading {weight_file} -> {remote_path} ({weight_file.stat().st_size / 1e6:.0f} MB)")
     api.upload_file(
@@ -30,7 +31,24 @@ def upload_lang(api, lang):
         path_in_repo=remote_path,
         repo_id=REPO_ID,
     )
-    print(f"  Done: {lang}")
+    print(f"  Done: {lang} (PyTorch)")
+
+    # Upload ONNX files if available
+    onnx_dir = WEIGHTS_DIR / lang / "onnx"
+    if onnx_dir.exists():
+        onnx_files = list(onnx_dir.iterdir())
+        if onnx_files:
+            print(f"  Uploading ONNX files from {onnx_dir}:")
+            for f in sorted(onnx_files):
+                remote = f"weights/{lang}/onnx/{f.name}"
+                print(f"    {f.name} -> {remote} ({f.stat().st_size / 1e6:.1f} MB)")
+                api.upload_file(
+                    path_or_fileobj=str(f),
+                    path_in_repo=remote,
+                    repo_id=REPO_ID,
+                )
+            print(f"  Done: {lang} (ONNX)")
+
     return True
 
 

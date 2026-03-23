@@ -257,11 +257,15 @@ class Opla:
         results = decode_batch(
             pos_logits, arc_scores, rel_scores,
             enc.word_masks, enc.subword2word, enc.word_forms,
+            raw_forms=enc.raw_forms,
         )
 
         if self._lemmatize and self._lemmatizer is not None:
-            # Batch all forms across all sentences for one Dilemma call
-            all_forms = [t["form"] for sent in results for t in sent]
+            # Use raw (polytonic) forms for lemmatization when available,
+            # since Dilemma's lookup tables are keyed on polytonic forms.
+            all_forms = [
+                t.get("raw_form", t["form"]) for sent in results for t in sent
+            ]
             # Use POS-aware lemmatization if available
             if hasattr(self._lemmatizer, "lemmatize_batch_pos"):
                 all_upos = [t["upos"] for sent in results for t in sent]

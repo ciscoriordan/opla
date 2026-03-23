@@ -165,9 +165,13 @@ text (~13 subwords per sentence), this means ~150 sentences per batch.
 ### Integrated lemmatization
 
 When [Dilemma](https://github.com/ciscoriordan/dilemma) is installed, Opla
-batches all token forms across all sentences in a single `lemmatize_batch()`
-call. Lookup table hits resolve instantly; only unknown forms go through
-Dilemma's character-level transformer, and those are batched too.
+uses POS-aware lemmatization via `lemmatize_batch_pos()`, passing each
+token's predicted UPOS tag to Dilemma for disambiguation (e.g., distinguishing
+adverbial vs pronominal forms of the same surface word). The original polytonic
+forms from the input text are preserved as `raw_form` and used for lookup,
+since Dilemma's tables are keyed on polytonic Greek. Lookup table hits resolve
+instantly; only unknown forms go through Dilemma's character-level transformer,
+and those are batched too.
 
 ### ONNX inference
 
@@ -200,6 +204,7 @@ Each token is a dict with these fields:
 | Field | Type | Description |
 |-------|------|-------------|
 | `form` | str | Surface word form (accent-stripped, lowercased) |
+| `raw_form` | str | Original polytonic form from input text |
 | `upos` | str | Universal POS tag (17 tags: VERB, NOUN, ADJ, DET, ...) |
 | `lemma` | str | Lemma from Dilemma (if `lemmatize=True`) |
 | `feats` | dict | Morphological features (Case, Gender, Number, Tense, ...) |

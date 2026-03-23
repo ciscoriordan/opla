@@ -12,6 +12,7 @@ def decode_batch(
     word_masks: list[list[bool]],
     subword2word: list[dict],
     word_forms: list[list[str]],
+    raw_forms: list[list[str]] | None = None,
 ) -> list[list[dict]]:
     """Decode a batch of model outputs into per-sentence token dicts.
 
@@ -21,11 +22,13 @@ def decode_batch(
         rel_scores: (batch, seq, seq, numrels) relation scores
         word_masks: per-sentence first-subword boolean masks
         subword2word: per-sentence {subword_idx -> word_idx} mappings
-        word_forms: per-sentence original word forms
+        word_forms: per-sentence normalized word forms (stripped+lowered)
+        raw_forms: per-sentence original word forms (polytonic), or None
 
     Returns:
         List of sentence results, each a list of token dicts:
         {"form": str, "upos": str, "feats": dict, "head": int, "deprel": str}
+        If raw_forms is provided, each dict also includes "raw_form".
     """
     batch_size = arc_scores.shape[0]
 
@@ -52,6 +55,7 @@ def decode_batch(
         mask = word_masks[b]
         s2w = subword2word[b]
         forms = word_forms[b]
+        rforms = raw_forms[b] if raw_forms else None
 
         word_i = 0  # 0-indexed into forms list
         for j, is_first_subword in enumerate(mask):
@@ -88,13 +92,16 @@ def decode_batch(
             deprel_idx = deprel_preds[b, j].item()
             deprel = dp_labels[deprel_idx]
 
-            tokens.append({
+            tok = {
                 "form": form,
                 "upos": upos,
                 "feats": feats,
                 "head": head_word,
                 "deprel": deprel,
-            })
+            }
+            if rforms and word_i < len(rforms):
+                tok["raw_form"] = rforms[word_i]
+            tokens.append(tok)
             word_i += 1
 
         results.append(tokens)

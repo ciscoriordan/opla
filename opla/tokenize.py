@@ -29,7 +29,8 @@ class BatchEncoding(NamedTuple):
     attention_mask: torch.Tensor  # (batch, padded_seq_len)
     word_masks: list[list[bool]]  # per-sentence first-subword masks
     subword2word: list[dict]      # per-sentence {subword_idx -> word_idx}
-    word_forms: list[list[str]]   # per-sentence original word forms
+    word_forms: list[list[str]]   # per-sentence normalized word forms (stripped+lowered)
+    raw_forms: list[list[str]]    # per-sentence original word forms (polytonic)
 
 
 def _get_tokenizer():
@@ -72,10 +73,17 @@ def batch_tokenize(
     all_word_masks = []
     all_s2w = []
     all_forms = []
+    all_raw_forms = []
 
     for i in range(len(sentences)):
         ids = enc.input_ids[i].tolist()
         tokens = tokenizer.convert_ids_to_tokens(ids)
+
+        # Split original sentence into whitespace tokens for alignment.
+        # BERT's tokenizer splits on whitespace identically for both
+        # original and normalized text (strip_accents_and_lowercase
+        # preserves spaces), so word boundaries align 1:1.
+        orig_words = sentences[i].split()
 
         mask = []
         s2w = {0: 0}  # CLS -> root (index 0)
@@ -107,9 +115,20 @@ def batch_tokenize(
         if current_ids:
             forms.append(tokenizer.decode(current_ids))
 
+        # Build raw_forms from original words, aligned to BERT word indices.
+        # If BERT produced fewer words (due to truncation), pad with the
+        # normalized form; if more (shouldn't happen), truncate.
+        raw_forms = []
+        for w_i in range(len(forms)):
+            if w_i < len(orig_words):
+                raw_forms.append(orig_words[w_i])
+            else:
+                raw_forms.append(forms[w_i])
+
         all_word_masks.append(mask)
         all_s2w.append(s2w)
         all_forms.append(forms)
+        all_raw_forms.append(raw_forms)
 
     return BatchEncoding(
         input_ids=enc.input_ids,
@@ -117,4 +136,5 @@ def batch_tokenize(
         word_masks=all_word_masks,
         subword2word=all_s2w,
         word_forms=all_forms,
+        raw_forms=all_raw_forms,
     )
