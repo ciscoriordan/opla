@@ -388,6 +388,10 @@ https://github.com/ciscoriordan/opla
 - [Dilemma](https://github.com/ciscoriordan/dilemma) - Greek lemmatizer (MG + AG + Medieval)
 - [Dragoman](https://huggingface.co/ciscoriordan/dragoman) - Greek word alignment model
 
+## Upcoming
+
+- `pip install opla` - PyPI package for easy installation
+
 ## License
 
 MIT
