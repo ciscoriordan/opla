@@ -49,6 +49,9 @@ class Opla:
         checkpoint: Path to a joint checkpoint (AG). Overrides pos/dp_path.
         max_subwords: Maximum subwords per batch before flushing.
         lemmatize: Whether to include lemmas in output (requires Dilemma).
+        lemma_cache: Pre-built {form: lemma} dict. Forms found in the
+            cache skip Dilemma entirely. Useful for large corpora where
+            most tokens map to known forms.
     """
 
     def __init__(
@@ -60,6 +63,7 @@ class Opla:
         checkpoint: str | None = None,
         max_subwords: int = _DEFAULT_MAX_SUBWORDS,
         lemmatize: bool = True,
+        lemma_cache: dict[str, str] | None = None,
     ):
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -67,6 +71,7 @@ class Opla:
         self.max_subwords = max_subwords
         self.lang = lang
         self._lemmatize = lemmatize
+        self._lemma_cache = lemma_cache
         self._lemmatizer = None
 
         if lang == "el":
@@ -267,12 +272,36 @@ class Opla:
             all_forms = [
                 t.get("raw_form", t["form"]) for sent in results for t in sent
             ]
-            # Use POS-aware lemmatization if available
-            if hasattr(self._lemmatizer, "lemmatize_batch_pos"):
-                all_upos = [t["upos"] for sent in results for t in sent]
-                all_lemmas = self._lemmatizer.lemmatize_batch_pos(all_forms, all_upos)
+
+            # Check lemma cache first, only send misses to Dilemma
+            cache = self._lemma_cache
+            if cache:
+                all_lemmas = [cache.get(f) for f in all_forms]
+                miss_indices = [i for i, l in enumerate(all_lemmas)
+                                if l is None]
+                if miss_indices:
+                    miss_forms = [all_forms[i] for i in miss_indices]
+                    if hasattr(self._lemmatizer, "lemmatize_batch_pos"):
+                        all_upos = [t["upos"] for sent in results
+                                    for t in sent]
+                        miss_upos = [all_upos[i] for i in miss_indices]
+                        miss_lemmas = self._lemmatizer.lemmatize_batch_pos(
+                            miss_forms, miss_upos)
+                    else:
+                        miss_lemmas = self._lemmatizer.lemmatize_batch(
+                            miss_forms)
+                    for idx, lemma in zip(miss_indices, miss_lemmas):
+                        all_lemmas[idx] = lemma
             else:
-                all_lemmas = self._lemmatizer.lemmatize_batch(all_forms)
+                # No cache - send everything to Dilemma
+                if hasattr(self._lemmatizer, "lemmatize_batch_pos"):
+                    all_upos = [t["upos"] for sent in results
+                                for t in sent]
+                    all_lemmas = self._lemmatizer.lemmatize_batch_pos(
+                        all_forms, all_upos)
+                else:
+                    all_lemmas = self._lemmatizer.lemmatize_batch(all_forms)
+
             idx = 0
             for sent_tokens in results:
                 for token in sent_tokens:

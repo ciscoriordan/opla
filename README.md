@@ -75,6 +75,7 @@ sentences = segment("π.χ. αυτό είναι μία πρόταση. Αυτή 
 Opla(
     device="cuda",       # "cuda", "cpu", or None (auto-detect)
     lemmatize=True,      # include Dilemma lemmas in output
+    lemma_cache=cache,   # pre-built {form: lemma} dict (skip Dilemma for hits)
     max_subwords=2048,   # subword budget per batch (tune for VRAM)
     checkpoint="onnx",   # use ONNX weights if available (AG/med only)
 )
@@ -172,6 +173,18 @@ forms from the input text are preserved as `raw_form` and used for lookup,
 since Dilemma's tables are keyed on polytonic Greek. Lookup table hits resolve
 instantly; only unknown forms go through Dilemma's character-level transformer,
 and those are batched too.
+
+For large corpora, pass a pre-built lemma cache to skip Dilemma entirely for
+known forms:
+
+```python
+from dilemma import Dilemma
+d = Dilemma(lang="grc")
+cache = d.export_cache()  # {form: lemma} for all 12M+ forms
+
+model = Opla(lang="grc", lemma_cache=cache)
+# Dilemma is only called for forms not in the cache
+```
 
 ### ONNX inference
 
