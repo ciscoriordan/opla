@@ -181,6 +181,7 @@ class Opla:
                 return
         dilemma_lang = "all"
         self._lemmatizer = Dilemma(lang=dilemma_lang, device="cpu")
+        self._lemmatizer.preload()
 
     def tag(
         self,
