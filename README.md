@@ -263,6 +263,19 @@ convert_digrec.py    # Convert DiGreC PROIEL XML to CoNLL-U for med training
 convert_gorman.py    # Convert Gorman AGDT XML to CoNLL-U for grc training
 export_onnx.py       # Export model to ONNX format for CPU deployment
 upload_weights.py    # Upload trained weights to HuggingFace
+tests/
+    test_opla.py     # Test suite (pytest): segmentation, tokenization, labels, POS, DP, lemma
+    conftest.py      # pytest config: --run-slow flag for tests requiring model weights
+```
+
+## Testing
+
+```bash
+# Fast tests (segmentation, tokenization, labels, init) - no model weights needed
+python -m pytest tests/ -x -v
+
+# Full tests including model inference and ONNX parity (requires weights)
+python -m pytest tests/ -x -v --run-slow
 ```
 
 ## Language coverage

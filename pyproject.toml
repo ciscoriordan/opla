@@ -15,3 +15,8 @@ dependencies = [
 
 [project.optional-dependencies]
 lemma = ["dilemma"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: tests requiring model weights (skip by default, run with --run-slow)",
+]
