@@ -268,6 +268,16 @@ Tested on Iakovos Polylas's 1892 Iliad translation (Katharevousa-influenced
 verse), which includes archaic verb forms, accusative -ν endings, polytonic
 remnants, and poetic elisions not found in standard MG.
 
+**HNC Golden Corpus:** The [Hellenic National Corpus](https://inventory.clarin.gr/corpus/870)
+Gold Standard (88K tokens, CLARIN:EL, openUnder-PSI) provides POS-tagged
+Modern Greek text but uses the ILSP tagset (386 tags like `NoCmFeSgNm`)
+rather than UD. The coarse categories map to UPOS (No->NOUN, Vb->VERB,
+Aj->ADJ, etc.) but the morphological features are encoded differently,
+making it unsuitable as training or evaluation data for Opla without a
+substantial tagset mapping effort. The HNC is used by
+[Dilemma](https://github.com/ciscoriordan/dilemma) for MG lemmatization
+evaluation instead.
+
 ### Ancient Greek
 
 The `grc` model uses
