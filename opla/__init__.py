@@ -120,7 +120,7 @@ class Opla:
 
     def _init_grc_from_file(self, checkpoint: str, fallback_bert: str = "grc"):
         """Load a single-backbone checkpoint (shared by grc, med, and fine-tuned el)."""
-        ckpt = torch.load(checkpoint, map_location="cpu", weights_only=True)
+        ckpt = torch.load(checkpoint, map_location="cpu", weights_only=False)
 
         bert_name = ckpt.get("bert_model", _BERT_MODELS[fallback_bert])
         feat_sizes = ckpt.get("feat_sizes")
