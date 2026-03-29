@@ -52,6 +52,10 @@ class Opla:
         lemma_cache: Pre-built {form: lemma} dict. Forms found in the
             cache skip Dilemma entirely. Useful for large corpora where
             most tokens map to known forms.
+        dialect: Ancient Greek dialect for Dilemma normalization. One of
+            "ionic", "doric", "aeolic", "koine", "auto", or None
+            (default). Passed through to Dilemma to normalize dialect
+            forms to Attic equivalents before lemma lookup.
     """
 
     def __init__(
@@ -64,6 +68,7 @@ class Opla:
         max_subwords: int = _DEFAULT_MAX_SUBWORDS,
         lemmatize: bool = True,
         lemma_cache: dict[str, str] | None = None,
+        dialect: str | None = None,
     ):
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -73,6 +78,7 @@ class Opla:
         self._lemmatize = lemmatize
         self._lemma_cache = lemma_cache
         self._lemmatizer = None
+        self._dialect = dialect
 
         if lang == "el":
             self._init_el(pos_path, dp_path)
@@ -185,7 +191,8 @@ class Opla:
                 self._lemmatize = False
                 return
         dilemma_lang = "all"
-        self._lemmatizer = Dilemma(lang=dilemma_lang, device="cpu")
+        self._lemmatizer = Dilemma(lang=dilemma_lang, device="cpu",
+                                   dialect=self._dialect)
         self._lemmatizer.preload()
 
     def tag(

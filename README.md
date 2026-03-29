@@ -78,8 +78,27 @@ Opla(
     lemma_cache=cache,   # pre-built {form: lemma} dict (skip Dilemma for hits)
     max_subwords=2048,   # subword budget per batch (tune for VRAM)
     checkpoint="onnx",   # use ONNX weights if available (AG/med only)
+    dialect="ionic",     # dialect normalization for Dilemma (see below)
 )
 ```
+
+### Dialect-aware lemmatization
+
+When tagging dialectal Ancient Greek, pass `dialect` to normalize dialect
+forms to Attic equivalents before lemma lookup. This improves lemmatization
+accuracy for authors like Herodotus (Ionic), Pindar (Doric), or Sappho
+(Aeolic):
+
+```python
+# Tag Herodotus with Ionic dialect normalization
+model = Opla(lang="grc", dialect="ionic")
+results = model.tag(["ταῦτα μέν νυν Πέρσαι τε καὶ Φοίνικες λέγουσι"])
+```
+
+Valid values: `"ionic"`, `"doric"`, `"aeolic"`, `"koine"`, `"auto"` (try
+all dialects), or `None` (default, no dialect normalization). The parameter
+is passed through to [Dilemma](https://github.com/ciscoriordan/dilemma),
+which handles the normalization.
 
 ## Why not gr-nlp-toolkit?
 
