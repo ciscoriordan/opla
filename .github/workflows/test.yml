@@ -21,14 +21,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pytest
-          pip install -e .
-          # Install Dilemma from git for lemmatization tests
-          pip install git+https://github.com/ciscoriordan/dilemma.git || true
+          pip install pytest torch transformers huggingface-hub
+          pip install -e . --no-deps
 
       - name: Run fast tests (no model weights)
         run: |
-          # Only run tests not marked @pytest.mark.slow.
-          # Slow tests require model weights (500MB+ BERT downloads)
-          # and are meant for local development, not CI.
-          python -m pytest tests/ -x -v
+          python -m pytest tests/ -x -v -m "not slow"
