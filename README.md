@@ -20,7 +20,7 @@ custom-trained heads on [Ancient-Greek-BERT](https://huggingface.co/pranaydeeps/
 pip install -e .
 ```
 
-Requires *PyTorch*, *Transformers*, and *huggingface-hub*. MG weights are
+Requires *PyTorch* (2.5+), *Transformers*, and *huggingface-hub*. MG weights are
 downloaded from [AUEB-NLP/gr-nlp-toolkit](https://huggingface.co/AUEB-NLP/gr-nlp-toolkit)
 on first use. AG and Medieval weights are downloaded from
 [ciscoriordan/opla](https://huggingface.co/ciscoriordan/opla).
@@ -184,8 +184,10 @@ text (~13 subwords per sentence), this means ~150 sentences per batch.
 
 ### Integrated lemmatization
 
-When [Dilemma](https://github.com/ciscoriordan/dilemma) is installed, Opla
-uses POS-aware lemmatization via `lemmatize_batch_pos()`, passing each
+When [Dilemma](https://github.com/ciscoriordan/dilemma) is installed and
+`lemmatize=True`, Opla preloads Dilemma's lookup tables at init time for
+faster batch tagging. It then uses POS-aware lemmatization via
+`lemmatize_batch_pos()`, passing each
 token's predicted UPOS tag to Dilemma for disambiguation (e.g., distinguishing
 adverbial vs pronominal forms of the same surface word). The original polytonic
 forms from the input text are preserved as `raw_form` and used for lookup,
@@ -277,6 +279,8 @@ python -m pytest tests/ -x -v
 # Full tests including model inference and ONNX parity (requires weights)
 python -m pytest tests/ -x -v --run-slow
 ```
+
+CI runs the full suite (including `--run-slow`) on a self-hosted GPU runner.
 
 ## Language coverage
 
