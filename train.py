@@ -525,6 +525,11 @@ def main():
     torch.save(checkpoint, final_path)
     print(f"\nSaved final model to {final_path}")
 
+    # Clean up per-epoch checkpoints (keep only final)
+    for epoch_file in args.output.glob(f"opla_{args.lang}_epoch*.pt"):
+        epoch_file.unlink()
+        print(f"  Removed training checkpoint: {epoch_file.name}")
+
     # Final eval
     if dev_loader:
         print("\nFinal evaluation:")
